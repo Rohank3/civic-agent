@@ -29,6 +29,12 @@ The Temporal SDK downloads its time-skipping server on first use. The integratio
 5. The clinic webhook receives a workflow ID and review reference. Staff fetch /v1/workflows/{id}/review and its ?image=true variant, check the evidence and complete form, and POST the packet digest to /signature. The /otp endpoint accepts an authenticated connector's code and issues a five-minute encrypted reference. A 90-day interval schedule is available at /v1/credentialing/schedules.
 6. If submission fails after the intent insert, check the payer for a receipt, reconcile the database record and retained evidence, and involve clinic staff. An ordinary retry cannot repeat the click.
 
+### Intake and status shortcuts
+
+Send the intake payload to `POST /v1/prior-auth/validate` with the intake role to check document formats before opening a case. The response lists zero-based document indexes and error codes without echoing document contents. This checks text, base64 PDF headers, supported FHIR resources and duplicate names. OCR, extraction and clinical sufficiency checks run during case processing. The submission endpoint applies the same format checks.
+
+A successful intake returns a `status_url` and a `Location` header. Staff can fetch that URL to see the Temporal execution status, the workflow stage, the next scheduled payer poll in UTC, and links to the review packet, screenshot, signature or OTP endpoint when applicable. Each endpoint still enforces its role.
+
 ### Example synthetic profile
 
 To enable policy search, apply `config/policy_embeddings.sql` to PostgreSQL, load the clinic's licensed, versioned policy vectors and set embedding_model on the payer profile. The worker queries only effective policies for that payer and model. Staff receive the matching references with the review packet.
