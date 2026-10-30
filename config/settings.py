@@ -4,23 +4,25 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="MEDAUTO_", env_file=".env", extra="ignore")
-    vault_url: str
-    vault_token: SecretStr
+    model_config = SettingsConfigDict(env_prefix="CIVICAGENT_", env_file=".env", extra="ignore")
+    vault_url: str = "http://127.0.0.1:8200"
+    vault_token: SecretStr = SecretStr("root")
     vault_mount: str = "secret"
-    database_url: SecretStr
-    redis_url: SecretStr
+    database_url: SecretStr = SecretStr("sqlite+aiosqlite:///civicagent.db")
+    redis_url: SecretStr = SecretStr("redis://localhost:6379/0")
     temporal_address: str = "localhost:7233"
     temporal_mtls_secret: str | None = None
     namespace: str = "default"
-    task_queue: str = "medauto"
+    task_queue: str = "civicagent"
     audit_dir: str = "audit"
     audit_bucket: str | None = None
     retention_days: int = Field(default=2192, ge=1)
-    clinic_webhook: str
+    citizen_webhook: str = "https://example.gov/webhook"
     session_ttl: int = Field(default=900, ge=30, le=86400)
-    model: str | None = None
+    model: str = "gemini-2.0-flash"
     approved_model_endpoint: str | None = None
+    gemini_api_key: SecretStr | None = None
+    data_gov_api_key: str | None = None
 
     @model_validator(mode="after")
     def protect_temporal_connection(self):
