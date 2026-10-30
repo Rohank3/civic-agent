@@ -4,6 +4,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.runtime import Runtime
+from app.core.telemetry import telemetry_bus
 from .auth import authenticate, bearer, require
 from .v1.endpoints import services, webhooks, schemes
 
@@ -70,41 +71,27 @@ async def authorize_request(request, call_next):
     return response
 
 
-# Active WebSocket connections registry for real-time telemetry streaming
-class TelemetryManager:
-    def __init__(self):
-        self.active_connections: dict[str, list[WebSocket]] = {}
-
-    async def connect(self, case_id: str, websocket: WebSocket):
-        await websocket.accept()
-        if case_id not in self.active_connections:
-            self.active_connections[case_id] = []
-        self.active_connections[case_id].append(websocket)
-
-    def disconnect(self, case_id: str, websocket: WebSocket):
-        if case_id in self.active_connections:
-            if websocket in self.active_connections[case_id]:
-                self.active_connections[case_id].remove(websocket)
-            if not self.active_connections[case_id]:
-                del self.active_connections[case_id]
-
-    async def broadcast(self, case_id: str, message: dict):
-        if case_id in self.active_connections:
-            for connection in list(self.active_connections[case_id]):
-                try:
-                    await connection.send_json(message)
-                except Exception:
-                    pass
-
-
-telemetry_bus = TelemetryManager()
-
+import json
 
 @app.websocket("/ws/telemetry/{case_id}")
 async def telemetry_websocket(websocket: WebSocket, case_id: str):
     await telemetry_bus.connect(case_id, websocket)
     try:
         while True:
-            data = await websocket.receive_text()
+            text = await websocket.receive_text()
+            try:
+                cmd = json.loads(text)
+                action = cmd.get("action")
+                if action == "set_pacing":
+                    mode = cmd.get("mode", "1x")
+                    telemetry_bus.set_pacing(case_id, mode)
+                    await websocket.send_json({"type": "ack", "action": "set_pacing", "mode": mode})
+                elif action == "skip_to_next":
+                    telemetry_bus.signal_skip(case_id)
+                    await websocket.send_json({"type": "ack", "action": "skip_to_next"})
+                elif action == "ping":
+                    await websocket.send_json({"type": "pong", "case_id": case_id})
+            except Exception:
+                pass
     except WebSocketDisconnect:
         telemetry_bus.disconnect(case_id, websocket)

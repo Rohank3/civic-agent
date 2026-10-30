@@ -39,13 +39,70 @@ class AutonomousBureaucracyAgent:
         page: Page,
         service_request: ServiceRequest,
         solver: ObstacleSolver | None = None,
-        memory: PortalMemory | None = None
+        memory: PortalMemory | None = None,
+        telemetry_emitter: Any = None,
+        case_id: str | None = None,
+        pacing_mode: str = "1x"
     ):
         self.page = page
         self.request = service_request
         self.profile = service_request.profile
         self.solver = solver or ObstacleSolver()
         self.memory = memory
+        self.telemetry_emitter = telemetry_emitter
+        self.case_id = case_id or "case-live"
+        self.pacing_mode = pacing_mode
+        self.current_step = 1
+        self.current_actor = "AUTONOMOUS_AGENT"
+        self.total_fields_filled = 0
+
+    async def emit_telemetry(
+        self,
+        action: str,
+        details: str,
+        stage: str = "NAVIGATING",
+        actor: str = "AUTONOMOUS_AGENT",
+        capture_screenshot: bool = True
+    ):
+        if not self.telemetry_emitter:
+            return
+        frame_b64 = None
+        if capture_screenshot:
+            try:
+                frame_bytes = await self.page.screenshot(type="jpeg", quality=60)
+                frame_b64 = base64.b64encode(frame_bytes).decode("ascii")
+            except Exception:
+                pass
+
+        payload = {
+            "type": "telemetry",
+            "case_id": self.case_id,
+            "actor": actor,
+            "stage": stage,
+            "action": action,
+            "details": details,
+            "screenshot": frame_b64,
+            "step": self.current_step,
+            "fields_filled": self.total_fields_filled,
+            "pacing_mode": self.pacing_mode,
+        }
+        try:
+            if asyncio.iscoroutinefunction(self.telemetry_emitter):
+                await self.telemetry_emitter(payload)
+            else:
+                self.telemetry_emitter(payload)
+        except Exception as e:
+            logger.warning(f"Telemetry emit failed: {e}")
+
+    async def _pacing_delay(self):
+        if self.pacing_mode == "turbo":
+            return
+        elif self.pacing_mode == "5x":
+            await asyncio.sleep(0.05)
+        elif self.pacing_mode == "2x":
+            await asyncio.sleep(0.15)
+        else:
+            await asyncio.sleep(0.35)
 
     def _extract_name_parts(self, full_name: str) -> tuple[str, str]:
         parts = full_name.strip().split()
@@ -184,6 +241,15 @@ class AutonomousBureaucracyAgent:
         if self.memory and newly_learned:
             await self.memory.record_learned_selectors(self.request.portal_url, self.request.service_id, newly_learned)
 
+        self.total_fields_filled += filled_count
+        if filled_count > 0:
+            await self._pacing_delay()
+            await self.emit_telemetry(
+                action="FORM_POPULATED",
+                details=f"Populated {filled_count} form inputs on Step {self.current_step} with student demographics",
+                stage="POPULATING_FORM"
+            )
+
         # Handle file uploads if any input[type=file] is present
         await self._handle_file_uploads()
         return filled_count
@@ -218,6 +284,11 @@ class AutonomousBureaucracyAgent:
                     try:
                         await finput.set_input_files(str(tmp_path))
                         logger.info(f"Uploaded document {doc.name} to portal")
+                        await self.emit_telemetry(
+                            action="DOCUMENT_ATTACHED",
+                            details=f"Attached verified supporting document '{doc.name}'",
+                            stage="ATTACHING_DOCUMENTS"
+                        )
                     finally:
                         tmp_path.unlink(missing_ok=True)
             except Exception as e:
@@ -242,6 +313,13 @@ class AutonomousBureaucracyAgent:
                     except PlaywrightTimeout:
                         pass
                     await self.page.wait_for_timeout(300)
+                    self.current_step += 1
+                    await self._pacing_delay()
+                    await self.emit_telemetry(
+                        action="WIZARD_ADVANCED",
+                        details=f"Overcame step validations; advanced to Step {self.current_step}",
+                        stage="NAVIGATING"
+                    )
                     return True
             except Exception:
                 continue
@@ -287,6 +365,11 @@ class AutonomousBureaucracyAgent:
                 "national_id": self.profile.national_id
             }
         }
+        await self.emit_telemetry(
+            action="SELF_REFLECTION_VERIFIED",
+            details="Audited all interactive DOM inputs for semantic sufficiency before legal lock",
+            stage="SELF_REFLECTION"
+        )
         return snapshot
 
     async def submit_application(self) -> None:
@@ -343,6 +426,13 @@ class AutonomousBureaucracyAgent:
 
         screenshot_bytes = await self.page.screenshot(full_page=True)
         page_html = await self.page.content()
+
+        await self.emit_telemetry(
+            action="RECEIPT_EXTRACTED",
+            details=f"Application confirmed! Government Tracking #{receipt_text}",
+            stage="SUBMITTED",
+            actor="GOVERNMENT_AUTHORITY"
+        )
 
         return {
             "tracking_number": receipt_text,
