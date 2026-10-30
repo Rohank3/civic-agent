@@ -1,7 +1,11 @@
 import pytest
 from app.domain.citizen.schemas import CitizenProfile
 from app.domain.scholarships.client import ScholarshipRegistryClient, OFFICIAL_SCHOLARSHIP_CATALOG
-from app.domain.scholarships.ocr import extract_transcript_data
+from app.domain.scholarships.ocr import (
+    extract_transcript_data,
+    extract_income_certificate_data,
+    extract_dual_documents,
+)
 
 
 @pytest.mark.asyncio
@@ -88,3 +92,48 @@ def test_transcript_ocr_extraction():
     assert extracted.gpa == 3.92
     assert extracted.percentage == 92.5
     assert "Computer Science" in (extracted.major or "")
+
+
+def test_income_certificate_ocr_and_dual_extraction():
+    sample_transcript = b"""
+    OFFICIAL ACADEMIC RECORD
+    Student Name: Eleanor Vance
+    Roll No: 2024CS-9812
+    University: National Institute of Technology
+    Department: Computer Science and Engineering
+    Grade Point Average: 3.92
+    Percentage: 92.5%
+    Date of Issue: 2026-05-15
+    """
+
+    sample_income_cert = b"""
+    GOVERNMENT OF KARNATAKA - REVENUE DEPARTMENT
+    INCOME CERTIFICATE
+    Certificate Number: REV/INC/2026/9821
+    Date of Issue: 2026-01-10
+    Certified that Applicant Name: Eleanor Vance
+    Daughter of: Arthur Vance
+    Annual Family Income: Rs. 1,80,000
+    District: Bangalore Urban
+    State: Karnataka
+    Issuing Authority: Office of the Tahsildar
+    """
+
+    income_res = extract_income_certificate_data(sample_income_cert, "income_cert.txt")
+    assert income_res.certificate_number == "REV/INC/2026/9821"
+    assert income_res.annual_income == 180000.0
+    assert income_res.applicant_name == "Eleanor Vance"
+    assert income_res.state == "Karnataka"
+
+    dual_res = extract_dual_documents(
+        sample_transcript, "transcript.txt",
+        sample_income_cert, "income_cert.txt"
+    )
+    assert dual_res.name_match is True
+    assert dual_res.verified_income == 180000.0
+    assert dual_res.verified_gpa == 3.92
+    assert dual_res.sufficiency_score >= 0.9
+    assert dual_res.auto_populated_profile["full_name"] == "Eleanor Vance"
+    assert dual_res.auto_populated_profile["income_annual"] == 180000.0
+    assert dual_res.auto_populated_profile["address_state"] == "Karnataka"
+

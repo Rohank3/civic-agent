@@ -36,3 +36,30 @@ class TranscriptExtractionResult(BaseModel):
     academic_year: str | None = None
     confidence: float = Field(default=0.9, ge=0.0, le=1.0)
     raw_text: str | None = None
+
+
+class IncomeCertificateExtractionResult(BaseModel):
+    certificate_number: str | None = None
+    applicant_name: str | None = None
+    parent_or_guardian_name: str | None = None
+    annual_income: float | None = None
+    currency: str = "INR"
+    issuing_authority: str | None = None
+    state: str | None = None
+    district: str | None = None
+    issue_date: str | None = None
+    valid_until: str | None = None
+    confidence: float = Field(default=0.9, ge=0.0, le=1.0)
+    raw_text: str | None = None
+
+
+class DualDocumentExtractionResult(BaseModel):
+    transcript: TranscriptExtractionResult
+    income_certificate: IncomeCertificateExtractionResult
+    name_match: bool = True
+    verified_income: float | None = None
+    verified_gpa: float | None = None
+    sufficiency_score: float = Field(ge=0.0, le=1.0)
+    warnings: list[str] = Field(default_factory=list)
+    auto_populated_profile: dict[str, Any] = Field(default_factory=dict)
+
