@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   SkipForward, 
   Globe, 
@@ -7,7 +7,10 @@ import {
   CheckCircle2, 
   FileCheck, 
   AlertCircle,
-  KeyRound
+  KeyRound,
+  LogIn,
+  RefreshCw,
+  UserCheck
 } from 'lucide-react';
 import type { ActorRole, CitizenProfile, ScholarshipScheme } from '../../types';
 
@@ -38,6 +41,15 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   isExecuting,
   onTriggerHitlSignoff,
 }) => {
+  const [activePortalView, setActivePortalView] = useState<'form' | 'login'>(
+    selectedScheme?.login_mode === 'credentials' ? 'login' : 'form'
+  );
+  const [loginUsername, setLoginUsername] = useState(
+    selectedScheme?.credentials_username || 'rohankumar_7'
+  );
+  const [loginPassword, setLoginPassword] = useState('••••••••••••');
+  const [captchaCode, setCaptchaCode] = useState('7Kx9M');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const getActorTitle = () => {
     switch (activeActor) {
       case 'STUDENT_INTAKE':
@@ -147,27 +159,159 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
               </div>
               <div className="flex-1 bg-slate-900 px-2 py-0.5 rounded text-[11px] text-slate-300 font-mono flex items-center gap-1 border border-slate-700/60">
                 <Lock className="w-3 h-3 text-emerald-400" />
-                <span>
-                  {selectedScheme ? selectedScheme.portal_url : 'https://scholarships.gov.in/portal/wizard'}
+                <span className="truncate">
+                  {selectedScheme 
+                    ? (activePortalView === 'login' ? `${selectedScheme.portal_url}/auth/login` : selectedScheme.portal_url) 
+                    : 'https://scholarships.gov.in/portal/wizard'}
                 </span>
+              </div>
+              {/* Portal Mode Toggle: Login vs Wizard Form */}
+              <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded border border-slate-700/70 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => setActivePortalView('login')}
+                  className={`px-1.5 py-0.5 rounded transition-all flex items-center gap-1 ${
+                    activePortalView === 'login' 
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="View portal authentication challenge"
+                >
+                  <LogIn className="w-3 h-3" />
+                  <span>Portal Login</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePortalView('form')}
+                  className={`px-1.5 py-0.5 rounded transition-all flex items-center gap-1 ${
+                    activePortalView === 'form' 
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs' 
+                      : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                  title="View application wizard form"
+                >
+                  <FileCheck className="w-3 h-3" />
+                  <span>Scheme Wizard</span>
+                </button>
               </div>
             </div>
 
             {/* Portal Content Viewport */}
             <div className="p-4 flex-1 overflow-y-auto font-sans text-slate-200 space-y-4">
-              <div className="border-b border-slate-700/60 pb-3 flex items-start justify-between">
-                <div>
-                  <h3 className="font-bold text-sm text-white">
-                    {selectedScheme ? selectedScheme.name : 'State Public Scholarship & Grant Portal'}
-                  </h3>
-                  <p className="text-[11px] text-slate-400">
-                    Official Application Form for Higher Education Financial Aid
-                  </p>
+              {/* View 1: Government Portal Interactive Login Screen */}
+              {activePortalView === 'login' && !isExecuting && (
+                <div className="max-w-md mx-auto my-auto py-2 space-y-4">
+                  <div className="text-center border-b border-slate-800 pb-3">
+                    <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 mb-2">
+                      <KeyRound className="w-5 h-5" />
+                    </div>
+                    <h3 className="font-bold text-sm text-white">
+                      {selectedScheme?.name || 'National Scholarship Portal (NSP)'}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Official Government Applicant Login & Access Gateway
+                    </p>
+                  </div>
+
+                  <div className="space-y-3 text-xs bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+                    <div>
+                      <label className="text-slate-400 block mb-1 font-medium">Application ID / Registered Email</label>
+                      <input
+                        type="text"
+                        value={loginUsername}
+                        onChange={(e) => setLoginUsername(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
+                        placeholder="e.g. rohankumar_7"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-slate-400 block mb-1 font-medium">Password / Access Passkey</label>
+                      <input
+                        type="password"
+                        value={loginPassword}
+                        onChange={(e) => setLoginPassword(e.target.value)}
+                        className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
+                        placeholder="••••••••••••"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-slate-400 block mb-1 font-medium">Captcha Verification</label>
+                      <div className="flex items-center gap-2">
+                        <div className="px-3 py-1 bg-slate-900 border border-slate-700 rounded font-mono font-bold tracking-widest text-emerald-400 select-none text-sm">
+                          {captchaCode}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCaptchaCode(Math.random().toString(36).slice(2, 7).toUpperCase())}
+                          className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                          title="Refresh Captcha"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        </button>
+                        <input
+                          type="text"
+                          defaultValue={captchaCode}
+                          className="flex-1 bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-2 flex flex-col gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsLoggingIn(true);
+                          setTimeout(() => {
+                            setIsLoggingIn(false);
+                            setActivePortalView('form');
+                          }, 600);
+                        }}
+                        disabled={isLoggingIn}
+                        className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20"
+                      >
+                        {isLoggingIn ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Injecting Credentials via Playwright...</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>Sign In to Portal & Open Wizard</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setActivePortalView('form')}
+                        className="w-full py-1.5 text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                      >
+                        Skip Login (Fresh Registration Mode)
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  Step {currentStep} of 3
-                </span>
-              </div>
+              )}
+
+              {/* View 2: Application Wizard Form (Steps 1, 2, 3) */}
+              {(activePortalView === 'form' || isExecuting) && (
+                <>
+                  <div className="border-b border-slate-700/60 pb-3 flex items-start justify-between">
+                    <div>
+                      <h3 className="font-bold text-sm text-white">
+                        {selectedScheme ? selectedScheme.name : 'State Public Scholarship & Grant Portal'}
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Official Application Form for Higher Education Financial Aid
+                      </p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                      Step {currentStep} of 3
+                    </span>
+                  </div>
 
               {/* Step 1 Simulation: Demographics */}
               {currentStep === 1 && (
@@ -284,10 +428,12 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    )}
+  </div>
+</div>
+);
 };

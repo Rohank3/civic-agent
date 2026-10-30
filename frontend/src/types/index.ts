@@ -1,3 +1,14 @@
+export interface CitizenUser {
+  id: string;
+  username: string;
+  fullName: string;
+  email: string;
+  role: 'applicant' | 'admin' | 'officer';
+  authMethod: 'password' | 'digilocker' | 'demo';
+  avatar?: string;
+  profile?: CitizenProfile;
+}
+
 export interface ScholarshipScheme {
   id: string;
   name: string;

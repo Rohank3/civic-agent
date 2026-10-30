@@ -6,8 +6,10 @@ import { ViewportColumn } from './components/viewport/ViewportColumn';
 import { HitlModal } from './components/hitl/HitlModal';
 import { ReceiptModal } from './components/receipt/ReceiptModal';
 import { AddSchemeModal } from './components/intake/AddSchemeModal';
+import { LoginPage } from './components/auth/LoginPage';
 import type { 
   CitizenProfile, 
+  CitizenUser,
   SchemeMatchResult, 
   DualDocumentExtractionResult, 
   TelemetryEvent, 
@@ -27,13 +29,19 @@ import {
 export const App: React.FC = () => {
   const defaultPreset = SAMPLE_PRESETS[0];
 
-  const [userId] = useState<string>(() => {
-    const existing = localStorage.getItem('civicagent_user_id');
-    if (existing) return existing;
-    const generated = 'user_' + Math.random().toString(36).slice(2, 8);
-    localStorage.setItem('civicagent_user_id', generated);
-    return generated;
+  const [currentUser, setCurrentUser] = useState<CitizenUser | null>(() => {
+    const stored = localStorage.getItem('civic_logged_in_user');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch {
+        return null;
+      }
+    }
+    return null;
   });
+
+  const userId = currentUser ? currentUser.id : 'user_anonymous';
 
   const [profile, setProfile] = useState<CitizenProfile>(defaultPreset.profile);
   const [dualDocResult, setDualDocResult] = useState<DualDocumentExtractionResult | null>(null);
@@ -323,6 +331,32 @@ export const App: React.FC = () => {
     caseIdRef.current = `case-${Date.now().toString().slice(-6)}`;
   };
 
+  if (!currentUser) {
+    return (
+      <LoginPage
+        onLogin={(user) => {
+          setCurrentUser(user);
+          localStorage.setItem('civic_logged_in_user', JSON.stringify(user));
+          if (user.profile) {
+            setProfile(user.profile);
+          }
+        }}
+        onContinueAsGuest={() => {
+          const guest: CitizenUser = {
+            id: 'user_guest',
+            username: 'guest_citizen',
+            fullName: 'Guest Citizen',
+            email: 'guest@civicagent.gov',
+            role: 'applicant',
+            authMethod: 'demo',
+          };
+          setCurrentUser(guest);
+          localStorage.setItem('civic_logged_in_user', JSON.stringify(guest));
+        }}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30">
       {/* Top Navigation */}
@@ -330,6 +364,11 @@ export const App: React.FC = () => {
         wsConnected={wsConnected}
         activeActor={activeActor}
         onReset={handleReset}
+        currentUser={currentUser}
+        onLogout={() => {
+          localStorage.removeItem('civic_logged_in_user');
+          setCurrentUser(null);
+        }}
       />
 
       {/* 3-Column Split-Screen Cockpit Layout */}

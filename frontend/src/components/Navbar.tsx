@@ -1,14 +1,22 @@
 import React from 'react';
-import { ShieldCheck, Activity, Database, Sparkles, UserCheck } from 'lucide-react';
-import type { ActorRole } from '../types';
+import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut } from 'lucide-react';
+import type { ActorRole, CitizenUser } from '../types';
 
 interface NavbarProps {
   wsConnected: boolean;
   activeActor: ActorRole;
   onReset: () => void;
+  currentUser?: CitizenUser | null;
+  onLogout?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ wsConnected, activeActor, onReset }) => {
+export const Navbar: React.FC<NavbarProps> = ({ 
+  wsConnected, 
+  activeActor, 
+  onReset,
+  currentUser,
+  onLogout
+}) => {
   const getActorBadge = () => {
     switch (activeActor) {
       case 'STUDENT_INTAKE':
@@ -79,6 +87,27 @@ export const Navbar: React.FC<NavbarProps> = ({ wsConnected, activeActor, onRese
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             <span>New Case</span>
           </button>
+
+          {/* Authenticated Citizen Profile & Logout */}
+          {currentUser && (
+            <div className="flex items-center gap-2 pl-1.5 border-l border-slate-800">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+                <User className="w-3.5 h-3.5 text-blue-400" />
+                <span className="font-semibold text-white max-w-[120px] truncate">{currentUser.fullName}</span>
+                <span className="text-[10px] text-blue-400/80 hidden lg:inline">({currentUser.username})</span>
+              </div>
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="p-1 rounded-md bg-slate-800 hover:bg-rose-500/20 border border-slate-700 hover:border-rose-500/30 text-slate-400 hover:text-rose-300 transition-all cursor-pointer"
+                  title="Switch Citizen User / Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </header>
