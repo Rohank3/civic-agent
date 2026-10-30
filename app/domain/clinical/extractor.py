@@ -3,37 +3,29 @@ import json
 import re
 from collections.abc import Callable
 from pypdf import PdfReader
+from .fhir import MAX_TEXT, fhir_pages
 from .schemas import ClinicalRecord, Evidence, MISSING, Page
 
 
-def pdf_pages(name: str, raw: bytes, ocr: Callable[[bytes, int], str] | None = None):
+def pdf_pages(name: str, raw: bytes, ocr: Callable[[bytes, int], str] | None = None, max_pages=250):
+    if len(raw) > 8 * 1024 * 1024:
+        raise ValueError("PDF size limit exceeded")
     reader = PdfReader(io.BytesIO(raw), strict=True)
-    if len(reader.pages) > 250:
+    if len(reader.pages) > max_pages:
         raise ValueError("PDF page limit exceeded")
     pages = []
+    size = 0
     for number, page in enumerate(reader.pages, 1):
         text = page.extract_text() or ""
         if not text.strip():
             if ocr is None:
                 raise ValueError("Scanned page requires OCR")
             text = ocr(raw, number)
+        size += len(text)
+        if size > MAX_TEXT:
+            raise ValueError("PDF text limit exceeded")
         pages.append(Page(document_name=name, page_number=number, text=text))
     return pages
-
-
-def fhir_pages(name, payload):
-    resources = ([entry["resource"] for entry in payload["entry"]]
-                 if payload.get("resourceType") == "Bundle" else [payload])
-    supported = {"Coverage", "ServiceRequest", "Condition", "Patient", "Practitioner"}
-    patients = {r.get("id") for r in resources if r.get("resourceType") == "Patient"}
-    subjects = {r[k]["reference"] for r in resources for k in ("subject", "beneficiary")
-                if isinstance(r.get(k), dict) and "reference" in r[k]}
-    if len(patients) > 1 or len(subjects) > 1:
-        raise ValueError("Expected one patient per case")
-    if patients and subjects and next(iter(subjects)).split("/")[-1] not in patients:
-        raise ValueError("FHIR patient reference mismatch")
-    return [Page(document_name=name, page_number=i, text=json.dumps(r, ensure_ascii=False, indent=2))
-            for i, r in enumerate(resources, 1) if r.get("resourceType") in supported]
 
 
 PATTERNS = {

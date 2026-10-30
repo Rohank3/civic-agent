@@ -4,6 +4,7 @@ from datetime import date
 from temporalio import activity
 from app.domain.clinical.extractor import ClinicalExtractor, Page, fhir_pages, pdf_pages
 from app.domain.clinical.ocr import tesseract_page
+from app.domain.clinical.fhir import MAX_TEXT, validate_case_subjects
 from app.domain.clinical.policy_matcher import missing_requirements, policy_references
 
 
@@ -17,6 +18,8 @@ class ClinicalActivities:
         if data["payer"] == "caqh_proview":
             return self.rt.audit.json(case, "fields", data["dates"])
         pages = []
+        validate_case_subjects(doc["content"] for doc in data["documents"] if doc["kind"] == "fhir")
+        pdf_pages_left = 250
         for doc in data["documents"]:
             name = doc["name"]
             match doc["kind"]:
@@ -25,9 +28,14 @@ class ClinicalActivities:
                 case "fhir":
                     pages.extend(fhir_pages(name, doc["content"]))
                 case "pdf":
-                    pages.extend(await asyncio.to_thread(pdf_pages, name, base64.b64decode(doc["content"], validate=True), tesseract_page))
+                    parsed = await asyncio.to_thread(pdf_pages, name, base64.b64decode(doc["content"], validate=True),
+                                                     tesseract_page, pdf_pages_left)
+                    pdf_pages_left -= len(parsed)
+                    pages.extend(parsed)
                 case _:
                     raise ValueError("Unknown document kind")
+            if sum(len(page.text) for page in pages) > MAX_TEXT:
+                raise ValueError("Clinical source text limit exceeded")
         cfg = self.rt.settings
         extractor = (ClinicalExtractor.instructor(cfg.model, cfg.approved_model_endpoint)
                      if cfg.model else ClinicalExtractor())

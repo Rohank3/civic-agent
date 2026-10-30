@@ -111,6 +111,9 @@ class BrowserActivities:
         if approval["packet"] != packet or not approval["reviewer"]:
             raise ValueError("Invalid approval")
         reviewed = self.rt.audit.read_json(case, "review", packet)
+        source = self.source(case, ref)
+        if not source.get("initiator") or approval["reviewer"] == source["initiator"]:
+            raise ValueError("Independent reviewer required")
         async with self.portal(case, ref) as portal:
             if reviewed["source"] != ref or await portal.snapshot() != reviewed["snapshot"]:
                 raise ValueError("Draft changed after review")

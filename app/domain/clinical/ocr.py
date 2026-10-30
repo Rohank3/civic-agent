@@ -10,7 +10,8 @@ def tesseract_page(raw: bytes, number: int) -> str:
         pdf.write_bytes(raw)
         prefix = str(Path(directory) / "page")
         subprocess.run(["pdftoppm", "-f", str(number), "-l", str(number), "-singlefile",
-                        "-r", "200", "-png", str(pdf), prefix], check=True, capture_output=True, timeout=60)
+                        "-scale-to", "2400", "-png", str(pdf), prefix], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
         output = subprocess.run(["tesseract", prefix + ".png", "stdout"], check=True,
                                 capture_output=True, timeout=60)
         text = output.stdout.decode().strip()

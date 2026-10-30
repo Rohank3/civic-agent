@@ -60,13 +60,16 @@ async def test_browser_review_and_submission(tmp_path):
         acts = BrowserActivities(rt)
         case = "synthetic-case"
         source = audit.json(case, "source", {"payer": "availity", "expected_draft_id": "synthetic-001",
-            "profile": "sandbox", "documents": []})
+            "profile": "sandbox", "documents": [], "initiator": "starter"})
         fields = audit.json(case, "fields", {"values": {"cpt_hcpcs": "97110"}})
         await acts.populate(case, source, fields)
         packet = await acts.review(case, source, fields)
         review = audit.read_json(case, "review", packet)
         assert audit.get(case, "review.png", review["screenshot"]).startswith(b"\x89PNG")
         signature = audit.json(case, "signature", {"packet": packet, "reviewer": "reviewer-A"})
+        self_signed = audit.json(case, "signature", {"packet": packet, "reviewer": "starter"})
+        with pytest.raises(ValueError, match="Independent reviewer"):
+            await acts.submit(case, source, packet, self_signed)
         async with acts.portal(case, source) as portal:
             assert await portal.page.evaluate("navigator.webdriver") is None
             from app.domain.browser.vision_fallback import Point, navigation_click
