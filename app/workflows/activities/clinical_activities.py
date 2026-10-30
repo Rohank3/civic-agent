@@ -4,7 +4,7 @@ from datetime import date
 from temporalio import activity
 from app.domain.clinical.extractor import ClinicalExtractor, Page, fhir_pages, pdf_pages
 from app.domain.clinical.ocr import tesseract_page
-from app.domain.clinical.policy_matcher import missing_requirements
+from app.domain.clinical.policy_matcher import missing_requirements, policy_references
 
 
 class ClinicalActivities:
@@ -38,7 +38,11 @@ class ClinicalActivities:
         fields = {key: "; ".join(e.value for e in values) for key in profile["fields"]
                   if isinstance(values := getattr(record, key), list)}
         evidence = self.rt.audit.json(case, "evidence", record.model_dump())
-        return self.rt.audit.json(case, "fields", {"values": fields, "evidence": evidence})
+        policies = []
+        if profile.get("embedding_model"):
+            policies = await policy_references(self.rt.db, cfg.approved_model_endpoint,
+                                              profile["embedding_model"], data["payer"], record)
+        return self.rt.audit.json(case, "fields", {"values": fields, "evidence": evidence, "policies": policies})
 
     @activity.defn
     async def credential_case(self, case: str, provider: str, profile: str, initiator: str) -> str:

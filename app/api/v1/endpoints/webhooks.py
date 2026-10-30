@@ -48,6 +48,7 @@ async def review(workflow_id: str, request: Request, image: bool = False, actor=
     fields = rt.audit.read_json(case, "fields", packet["fields"])
     if "evidence" in fields:
         packet["evidence"] = rt.audit.read_json(case, "evidence", fields["evidence"])
+    packet["policies"] = fields.get("policies", [])
     return {"packet": state["packet"], "review": packet}
 
 

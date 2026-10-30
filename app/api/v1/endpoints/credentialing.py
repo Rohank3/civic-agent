@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import date, timedelta
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from temporalio.client import Schedule, ScheduleActionStartWorkflow, ScheduleIntervalSpec, ScheduleSpec
@@ -11,6 +11,15 @@ router = APIRouter()
 class Enrollment(BaseModel):
     provider: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
     profile: str = Field(pattern=r"^[a-zA-Z0-9_-]+$")
+
+
+@router.get("/credentialing/{provider}/expirations")
+async def expirations(provider: str, request: Request, actor=Depends(require("staff"))):
+    data = await request.app.state.rt.vault.read("providers/" + provider)
+    today = date.today()
+    return {key: {"expires": data[key]["expires"],
+                  "days_remaining": (date.fromisoformat(data[key]["expires"]) - today).days}
+            for key in ("state_license", "cds", "dea", "malpractice")}
 
 
 @router.post("/credentialing/schedules", status_code=201)
