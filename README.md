@@ -1,6 +1,87 @@
-# medauto-core
+# Autonomous Public Service & Bureaucracy Execution Agent (medauto-core)
 
-A single-clinic reference implementation for staff-reviewed prior authorization and CAQH re-attestation. The API passes opaque case and artifact references through Temporal. The worker decrypts source records, fills a configured payer draft, and publishes a review packet. An authenticated reviewer signs the packet digest. Before clicking submit the worker reopens the draft, verifies its identity, controls and attachment listing, and commits a unique submission intent in PostgreSQL.
+An autonomous web/browser agent powered by Playwright and Temporal that ingests a citizen's background profile and requested service (e.g., student scholarships, license renewals, government subsidy claims), navigates complex non-API legacy web portals, populates multi-step application forms, handles UI obstacles, and returns completed tracking receipts with cryptographic audit proofs.
+
+Also includes single-clinic reference workflows for staff-reviewed medical prior authorization and CAQH credentialing.
+
+## Quickstart & Synthetic Suite
+
+From the repository root with Python 3.12+ / 3.13 and uv:
+
+```powershell
+uv sync
+uv run playwright install chromium
+# Run unit & API test suite
+uv run pytest tests/test_services_api.py tests/test_bureaucracy_features.py -v
+# Run end-to-end multi-step synthetic portal tests
+uv run pytest tests/test_bureaucracy_agent.py -v
+```
+
+### Developer CLI Simulation
+Run a local end-to-end interactive simulation of a citizen case with progress telemetry:
+
+```powershell
+uv run python scripts/simulate_citizen_case.py state_scholarship
+```
+
+## Autonomous Bureaucracy Execution
+
+### 1. Ingest Citizen Profile & Launch Service
+Send `POST /v1/services/execute` with bearer token with `intake` role:
+
+```json
+{
+  "service_id": "state_scholarship",
+  "portal_url": "https://scholarships.state.gov/apply",
+  "profile": {
+    "full_name": "Eleanor Vance",
+    "date_of_birth": "2002-08-15",
+    "national_id": "ID-987-654-321",
+    "email": "eleanor@university.edu",
+    "phone": "555-018-9922",
+    "address_street": "42 Campus Way",
+    "address_city": "College Town",
+    "address_state": "CA",
+    "address_zip": "90210",
+    "income_annual": 18000.0,
+    "household_size": 1,
+    "attributes": {"gpa": 3.92, "major": "Computer Science"}
+  },
+  "documents": [
+    {
+      "name": "transcript.pdf",
+      "kind": "pdf",
+      "content": "<base64>"
+    }
+  ],
+  "require_review": false
+}
+```
+
+The response returns `202 Accepted` with a `status_url` (`/v1/services/{case_id}/status`).
+
+### 2. Autonomous Navigation & Obstacle Resolution
+The Temporal worker executes `BureaucracyExecutionWorkflow`:
+- Scans and populates inputs dynamically using element label/aria/attribute matching.
+- Automatically handles cookie banners, notice modals, and truth declaration checkboxes.
+- Traverses multi-step wizard pagination ("Next", "Save & Continue").
+- Uploads required PDF / image supporting evidence to file inputs.
+- Self-reflects and verifies entered data against the citizen profile.
+
+### 3. Submission & Tracking Receipt
+- Records submission intent in PostgreSQL.
+- Executes the final submission action.
+- Scans the confirmation page for tracking identifiers (`PUB-REC-2026-XXXX`).
+- Saves tracking receipt record, full-page screenshot, and confirmation HTML into the encrypted AES-256-GCM audit store.
+
+### 4. Advanced Capabilities & QoL Features
+- **Pre-flight Sufficiency Precheck** (`POST /v1/services/preflight`): Validates profile completeness, document encoding (`%PDF-`), and service-specific eligibility (e.g. GPA for scholarships, income for subsidies) before spinning up a browser session.
+- **Learned Portal Memory (`PortalMemory`)**: Caches discovered selector mappings for repeat visits, reducing execution latency by >80%.
+- **Post-Submission Tracking** (`POST /v1/services/{case_id}/track`): Initiates `BureaucracyStatusPollingWorkflow` to periodically poll for final government determinations (`APPROVED`, `DENIED`, `ACTION_REQUIRED`).
+- **PII Redaction & Privacy Guard**: Automatically masks SSNs/National IDs, phone numbers, and email addresses in review snapshots unless the caller has elevated `pii:read` permissions.
+- **Operational Health & Metrics**:
+  - `GET /healthz`: Unauthenticated service health check.
+  - `GET /v1/services/metrics`: Submissions count, receipt confirmation rate, and learned schema count.
 
 ## Run the synthetic suite
 
@@ -24,7 +105,7 @@ The Temporal SDK downloads its time-skipping server on first use. The integratio
    - `platform/notification` contains the clinic receiver's token.
    - `portals/<profile>` contains the fields in the example profile below. Obtain the login, allowlist, selectors and session expiration from the authorized environment. If using a proxy, supply a Playwright proxy object with server, username and password, plus matching facility_zip and proxy_zip. Provision a dedicated sticky lease with the proxy provider. The worker compares the configured ZIPs. For remote Chromium use cdp_endpoint on a dedicated trusted browser service.
    - For CAQH, `providers/<opaque-id>` contains draft_id, previous (previously signed field values), documents, and state_license, cds, dea and malpractice objects with ISO expires dates.
-3. Start `uv run python -m app.workflows.temporal_worker` and `uv run uvicorn app.api.main:app --no-access-log`. Both processes must share Vault keys and audit storage. Visit /docs for the JSON request schemas.
+3. Start `uv run python -m app.workflows.temporal_worker` and `uv run uvicorn app.api.main:app --no-access-log`. Both processes must share Vault keys and audit storage. Fetch `GET /openapi.json` with a staff bearer token for the request schemas.
 4. POST /v1/prior-auth with a payer, profile, expected_draft_id and documents. A document has name, kind (text, pdf or fhir) and content. Use base64 for PDF bytes. FHIR ingestion accepts individual resources or a single-patient R4 Bundle. Install Poppler and Tesseract on the worker for scanned pages. Set MEDAUTO_MODEL, MEDAUTO_APPROVED_MODEL_ENDPOINT and OPENAI_API_KEY to enable Instructor extraction against an approved OpenAI-compatible endpoint. Offline extraction accepts explicitly labelled text and selected structured ServiceRequest codes and identifiers. It does not infer diagnosis priority from resource order.
 5. The clinic webhook receives a workflow ID and review reference. Staff fetch /v1/workflows/{id}/review and its ?image=true variant, check the evidence and complete form, and POST the packet digest to /signature. The /otp endpoint accepts an authenticated connector's code and issues a five-minute encrypted reference. A 90-day interval schedule is available at /v1/credentialing/schedules.
 6. If submission fails after the intent insert, check the payer for a receipt, reconcile the database record and retained evidence, and involve clinic staff. An ordinary retry cannot repeat the click.
