@@ -64,6 +64,10 @@ async def test_intake_to_determination(tmp_path):
                     case = intake.json()["case"]
                     await asyncio.wait_for(ready.wait(), timeout=90)
                     path = "/v1/workflows/" + case
+                    assert intake.headers["location"] == intake.json()["status_url"] == path
+                    status = (await api.get(path, headers=staff)).json()
+                    assert status["execution_status"] == "RUNNING"
+                    assert status["links"]["review"] == path + "/review"
                     review = await api.get(path + "/review", headers=staff)
                     assert review.status_code == 200
                     approval = {"packet": review.json()["packet"]}

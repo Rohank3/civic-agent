@@ -15,10 +15,11 @@ class ReviewFlow:
         self.packet = ""
         self.signature = ""
         self.otp = ""
+        self.next_poll_at = None
 
     @workflow.query
     def status(self) -> dict:
-        return {"state": self.state, "packet": self.packet}
+        return {"state": self.state, "packet": self.packet, "next_poll_at": self.next_poll_at}
 
     @workflow.signal
     def signal_submit_otp(self, code: str):
@@ -65,7 +66,10 @@ class PriorAuthorizationWorkflow(ReviewFlow):
         hours = 4.0
         while True:
             delay = min(24, max(4, hours * workflow.random().uniform(0.95, 1.05)))
-            await workflow.sleep(timedelta(hours=delay))
+            interval = timedelta(hours=delay)
+            self.next_poll_at = (workflow.now() + interval).isoformat()
+            await workflow.sleep(interval)
+            self.next_poll_at = None
             status = await step("poll", case, source)
             if status in ("APPROVED", "DENIED", "WITHDRAWN"):
                 self.state = status
