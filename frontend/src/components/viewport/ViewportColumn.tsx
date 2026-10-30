@@ -6,7 +6,8 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   FileCheck, 
-  AlertCircle 
+  AlertCircle,
+  KeyRound
 } from 'lucide-react';
 import type { ActorRole, CitizenProfile, ScholarshipScheme } from '../../types';
 
@@ -62,8 +63,8 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
         </div>
 
         {/* Smart Pacing & Chapter Cuts Bar */}
-        <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800">
-          <span className="text-[10px] text-slate-400 font-medium px-1.5 hidden sm:inline">Speed:</span>
+        <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800" title="Agent execution pacing between browser actions">
+          <span className="text-[10px] text-slate-400 font-medium px-1.5 hidden sm:inline">Pacing:</span>
           <button
             onClick={() => setPacingMode('1x')}
             className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
@@ -171,6 +172,16 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
               {/* Step 1 Simulation: Demographics */}
               {currentStep === 1 && (
                 <div className="space-y-3 text-xs">
+                  {selectedScheme?.login_mode === 'credentials' && (
+                    <div className="p-2.5 rounded bg-blue-950/40 border border-blue-500/40 text-[11px] text-blue-200 flex items-center gap-2">
+                      <KeyRound className="w-4 h-4 text-cyan-400 shrink-0" />
+                      <span>
+                        <strong>Portal Authenticated:</strong> Session unlocked using encrypted credentials for{' '}
+                        <code>{selectedScheme.credentials_username || 'Student User'}</code>.
+                      </span>
+                    </div>
+                  )}
+
                   <div className="p-2.5 rounded bg-blue-950/30 border border-blue-800/40 text-[11px] text-blue-200 flex items-center gap-2">
                     <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
                     <span>Agent auto-filling applicant demographics via heuristic DOM matcher.</span>

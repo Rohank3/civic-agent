@@ -5,6 +5,7 @@ import { TraceColumn } from './components/telemetry/TraceColumn';
 import { ViewportColumn } from './components/viewport/ViewportColumn';
 import { HitlModal } from './components/hitl/HitlModal';
 import { ReceiptModal } from './components/receipt/ReceiptModal';
+import { AddSchemeModal } from './components/intake/AddSchemeModal';
 import type { 
   CitizenProfile, 
   SchemeMatchResult, 
@@ -15,10 +16,24 @@ import type {
   ScholarshipScheme 
 } from './types';
 import { SAMPLE_PRESETS } from './lib/presets';
-import { matchSchemes, parseDualDocuments, submitDigitalSignature } from './lib/api';
+import { 
+  matchSchemes, 
+  parseDualDocuments, 
+  submitDigitalSignature,
+  createCustomScheme,
+  deleteCustomScheme
+} from './lib/api';
 
 export const App: React.FC = () => {
   const defaultPreset = SAMPLE_PRESETS[0];
+
+  const [userId] = useState<string>(() => {
+    const existing = localStorage.getItem('civicagent_user_id');
+    if (existing) return existing;
+    const generated = 'user_' + Math.random().toString(36).slice(2, 8);
+    localStorage.setItem('civicagent_user_id', generated);
+    return generated;
+  });
 
   const [profile, setProfile] = useState<CitizenProfile>(defaultPreset.profile);
   const [dualDocResult, setDualDocResult] = useState<DualDocumentExtractionResult | null>(null);
@@ -36,6 +51,7 @@ export const App: React.FC = () => {
   const [receipt, setReceipt] = useState<TrackingReceipt | null>(null);
   const [receiptOpen, setReceiptOpen] = useState<boolean>(false);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
 
   const caseIdRef = useRef<string>('case-2026-001');
   const wsRef = useRef<WebSocket | null>(null);
@@ -58,7 +74,7 @@ export const App: React.FC = () => {
   // Initialize schemes and parse initial preset
   useEffect(() => {
     async function init() {
-      const matched = await matchSchemes(defaultPreset.profile);
+      const matched = await matchSchemes(defaultPreset.profile, userId);
       setSchemes(matched);
       if (matched.length > 0) {
         setSelectedScheme(matched[0].scheme);
@@ -67,15 +83,34 @@ export const App: React.FC = () => {
       setDualDocResult(initialDocRes);
     }
     init();
-  }, [defaultPreset]);
+  }, [defaultPreset, userId]);
 
   const handleParseDocuments = async (transcript: string, income: string) => {
     const res = await parseDualDocuments(transcript, income);
     setDualDocResult(res);
     setProfile(res.auto_populated_profile);
-    const matched = await matchSchemes(res.auto_populated_profile);
+    const matched = await matchSchemes(res.auto_populated_profile, userId);
     setSchemes(matched);
     if (matched.length > 0) {
+      setSelectedScheme(matched[0].scheme);
+    }
+  };
+
+  const handleCreateCustomScheme = async (schemeData: Partial<ScholarshipScheme>) => {
+    const newScheme = await createCustomScheme(schemeData, userId);
+    const matched = await matchSchemes(profile, userId);
+    setSchemes(matched);
+    const found = matched.find((m) => m.scheme.id === newScheme.id);
+    if (found) {
+      setSelectedScheme(found.scheme);
+    }
+  };
+
+  const handleDeleteCustomScheme = async (schemeId: string) => {
+    await deleteCustomScheme(schemeId, userId);
+    const matched = await matchSchemes(profile, userId);
+    setSchemes(matched);
+    if (selectedScheme?.id === schemeId && matched.length > 0) {
       setSelectedScheme(matched[0].scheme);
     }
   };
@@ -308,6 +343,8 @@ export const App: React.FC = () => {
             schemes={schemes}
             onSelectSchemeAndExecute={handleSelectSchemeAndExecute}
             isExecuting={isExecuting}
+            onOpenAddModal={() => setIsAddModalOpen(true)}
+            onDeleteCustomScheme={handleDeleteCustomScheme}
           />
         </section>
 
@@ -350,6 +387,14 @@ export const App: React.FC = () => {
       <ReceiptModal
         receipt={receiptOpen ? receipt : null}
         onClose={() => setReceiptOpen(false)}
+      />
+
+      {/* User-Isolated Custom Scheme / Portal Modal */}
+      <AddSchemeModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onAddScheme={handleCreateCustomScheme}
+        userId={userId}
       />
     </div>
   );

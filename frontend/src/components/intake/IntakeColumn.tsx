@@ -9,7 +9,11 @@ import {
   User, 
   Award, 
   Sparkles,
-  ShieldCheck
+  ShieldCheck,
+  PlusCircle,
+  Trash2,
+  KeyRound,
+  Globe
 } from 'lucide-react';
 import type { CitizenProfile, SchemeMatchResult, DualDocumentExtractionResult } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
@@ -22,6 +26,8 @@ interface IntakeColumnProps {
   schemes: SchemeMatchResult[];
   onSelectSchemeAndExecute: (scheme: SchemeMatchResult) => void;
   isExecuting: boolean;
+  onOpenAddModal: () => void;
+  onDeleteCustomScheme: (id: string) => void;
 }
 
 export const IntakeColumn: React.FC<IntakeColumnProps> = ({
@@ -31,6 +37,8 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
   schemes,
   onSelectSchemeAndExecute,
   isExecuting,
+  onOpenAddModal,
+  onDeleteCustomScheme,
 }) => {
   const [selectedPreset, setSelectedPreset] = useState<string>('first_gen_stem');
   const [showProfileDetails, setShowProfileDetails] = useState<boolean>(false);
@@ -181,9 +189,17 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
               <Award className="w-3.5 h-3.5 text-amber-400" />
-              <span>Eligible Statutory Schemes ({schemes.length})</span>
+              <span>Available Schemes ({schemes.length})</span>
             </span>
-            <span className="text-[10px] text-slate-400">Ranked by Cut-off</span>
+            <button
+              onClick={onOpenAddModal}
+              disabled={isExecuting}
+              className="px-2 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/40 text-cyan-300 text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
+              title="Add a custom government, state, or college scholarship portal"
+            >
+              <PlusCircle className="w-3 h-3" />
+              <span>+ Add Custom Portal</span>
+            </button>
           </div>
 
           <div className="space-y-2">
@@ -192,20 +208,49 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               return (
                 <div
                   key={scheme.id}
-                  className="p-3 rounded-lg border border-slate-800 bg-slate-800/40 hover:border-slate-700 transition-all space-y-2"
+                  className={`p-3 rounded-lg border transition-all space-y-2 ${
+                    scheme.is_custom
+                      ? 'border-cyan-500/40 bg-cyan-950/20 shadow-sm shadow-cyan-500/5'
+                      : 'border-slate-800 bg-slate-800/40 hover:border-slate-700'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-semibold text-xs text-white leading-tight">
-                        {scheme.name}
-                      </h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
-                        {scheme.ministry}
+                    <div className="flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-semibold text-xs text-white leading-tight">
+                          {scheme.name}
+                        </h4>
+                        {scheme.is_custom && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            Custom Target
+                          </span>
+                        )}
+                        {scheme.login_mode === 'credentials' && (
+                          <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-0.5">
+                            <KeyRound className="w-2.5 h-2.5" />
+                            <span>Auth Required</span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 flex items-center gap-1">
+                        <Globe className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                        <span className="truncate">{scheme.portal_url}</span>
                       </p>
                     </div>
-                    <span className="text-xs font-bold text-emerald-400 whitespace-nowrap">
-                      ₹{scheme.grant_amount_annual.toLocaleString()}/yr
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-xs font-bold text-emerald-400 whitespace-nowrap">
+                        ₹{scheme.grant_amount_annual.toLocaleString()}/yr
+                      </span>
+                      {scheme.is_custom && (
+                        <button
+                          onClick={() => onDeleteCustomScheme(scheme.id)}
+                          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                          title="Delete this custom scheme"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* Match Criteria Badges */}
@@ -227,7 +272,13 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                     disabled={isExecuting || !is_eligible}
                     className="w-full mt-1 py-1.5 px-3 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                   >
-                    <span>{isExecuting ? 'Agent Running...' : 'Auto-Apply with CivicAgent'}</span>
+                    <span>
+                      {isExecuting
+                        ? 'Agent Running...'
+                        : scheme.login_mode === 'credentials'
+                        ? 'Login & Apply with CivicAgent'
+                        : 'Auto-Apply with CivicAgent'}
+                    </span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

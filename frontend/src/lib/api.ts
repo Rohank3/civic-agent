@@ -70,21 +70,63 @@ export const OFFICIAL_FALLBACK_SCHEMES: ScholarshipScheme[] = [
   },
 ];
 
-export async function fetchSchemes(): Promise<ScholarshipScheme[]> {
+export function getLocalCustomSchemes(userId: string): ScholarshipScheme[] {
   try {
-    const res = await fetch(`${API_BASE}/schemes/list`);
+    const raw = localStorage.getItem(`civicagent_custom_schemes_${userId}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveLocalCustomScheme(scheme: ScholarshipScheme, userId: string): void {
+  try {
+    const existing = getLocalCustomSchemes(userId).filter((s) => s.id !== scheme.id);
+    existing.unshift(scheme);
+    localStorage.setItem(`civicagent_custom_schemes_${userId}`, JSON.stringify(existing));
+  } catch (e) {
+    console.warn('Failed to save to localStorage', e);
+  }
+}
+
+export function removeLocalCustomScheme(schemeId: string, userId: string): void {
+  try {
+    const existing = getLocalCustomSchemes(userId).filter((s) => s.id !== schemeId);
+    localStorage.setItem(`civicagent_custom_schemes_${userId}`, JSON.stringify(existing));
+  } catch (e) {
+    console.warn('Failed to remove from localStorage', e);
+  }
+}
+
+export async function fetchSchemes(userId?: string): Promise<ScholarshipScheme[]> {
+  const localCustom = userId ? getLocalCustomSchemes(userId) : [];
+  try {
+    const url = userId ? `${API_BASE}/schemes/list?user_id=${encodeURIComponent(userId)}` : `${API_BASE}/schemes/list`;
+    const res = await fetch(url);
     if (res.ok) {
-      return await res.json();
+      const serverSchemes: ScholarshipScheme[] = await res.json();
+      // Deduplicate
+      const ids = new Set(serverSchemes.map((s) => s.id));
+      const merged = [...serverSchemes];
+      for (const cs of localCustom) {
+        if (!ids.has(cs.id)) {
+          merged.unshift(cs);
+          ids.add(cs.id);
+        }
+      }
+      return merged;
     }
   } catch (e) {
     console.warn('Backend scheme endpoint unreachable, using live catalog fallback', e);
   }
-  return OFFICIAL_FALLBACK_SCHEMES;
+  return [...localCustom, ...OFFICIAL_FALLBACK_SCHEMES];
 }
 
-export async function matchSchemes(profile: CitizenProfile): Promise<SchemeMatchResult[]> {
+export async function matchSchemes(profile: CitizenProfile, userId?: string): Promise<SchemeMatchResult[]> {
+  const schemes = await fetchSchemes(userId);
   try {
-    const res = await fetch(`${API_BASE}/schemes/match`, {
+    const url = userId ? `${API_BASE}/schemes/match?user_id=${encodeURIComponent(userId)}` : `${API_BASE}/schemes/match`;
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(profile),
@@ -97,7 +139,6 @@ export async function matchSchemes(profile: CitizenProfile): Promise<SchemeMatch
   }
 
   // Client-side fallback evaluator matching backend client.py rules
-  const schemes = OFFICIAL_FALLBACK_SCHEMES;
   return schemes.map((s) => {
     const reasons: string[] = [];
     const missing: string[] = [];
@@ -130,6 +171,58 @@ export async function matchSchemes(profile: CitizenProfile): Promise<SchemeMatch
     };
   }).sort((a, b) => b.eligibility_score - a.eligibility_score);
 }
+
+export async function createCustomScheme(
+  data: Partial<ScholarshipScheme>,
+  userId: string
+): Promise<ScholarshipScheme> {
+  const newScheme: ScholarshipScheme = {
+    id: `custom_${Date.now().toString(36)}`,
+    name: data.name || 'Custom Scholarship Scheme',
+    ministry: data.ministry || 'State / University Department',
+    level: data.level || 'undergraduate',
+    target_category: data.target_category || ['ALL'],
+    max_family_income: data.max_family_income || 350000.0,
+    min_gpa_or_percentage: data.min_gpa_or_percentage || 60.0,
+    grant_amount_annual: data.grant_amount_annual || 30000.0,
+    application_deadline: data.application_deadline || '2026-12-31',
+    portal_url: data.portal_url || 'https://scholarships.gov.in',
+    required_documents: data.required_documents || ['Academic Transcript', 'Income Certificate'],
+    description: data.description || 'User-defined custom scholarship portal target.',
+    active: true,
+    is_custom: true,
+    user_id: userId,
+    login_mode: data.login_mode || 'fresh_registration',
+    credentials_username: data.credentials_username,
+    credentials_password: data.credentials_password,
+  };
+
+  saveLocalCustomScheme(newScheme, userId);
+
+  try {
+    await fetch(`${API_BASE}/schemes/custom`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newScheme, user_id: userId }),
+    });
+  } catch (e) {
+    console.warn('Backend custom scheme registration endpoint unavailable, saved locally', e);
+  }
+
+  return newScheme;
+}
+
+export async function deleteCustomScheme(schemeId: string, userId: string): Promise<void> {
+  removeLocalCustomScheme(schemeId, userId);
+  try {
+    await fetch(`${API_BASE}/schemes/custom/${schemeId}?user_id=${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    });
+  } catch (e) {
+    console.warn('Backend delete custom scheme endpoint unreachable, deleted locally', e);
+  }
+}
+
 
 export async function parseDualDocuments(
   transcriptText: string,

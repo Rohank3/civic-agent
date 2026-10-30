@@ -12,6 +12,11 @@ export interface ScholarshipScheme {
   required_documents: string[];
   description: string;
   active: boolean;
+  is_custom?: boolean;
+  user_id?: string;
+  login_mode?: 'fresh_registration' | 'credentials' | 'sso';
+  credentials_username?: string;
+  credentials_password?: string;
 }
 
 export interface SchemeMatchResult {
