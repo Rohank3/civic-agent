@@ -3,6 +3,7 @@ import base64
 from datetime import date
 from temporalio import activity
 from app.domain.clinical.extractor import ClinicalExtractor, Page, fhir_pages, pdf_pages
+from app.domain.clinical.ocr import tesseract_page
 from app.domain.clinical.policy_matcher import missing_requirements
 
 
@@ -24,7 +25,7 @@ class ClinicalActivities:
                 case "fhir":
                     pages.extend(fhir_pages(name, doc["content"]))
                 case "pdf":
-                    pages.extend(await asyncio.to_thread(pdf_pages, name, base64.b64decode(doc["content"], validate=True)))
+                    pages.extend(await asyncio.to_thread(pdf_pages, name, base64.b64decode(doc["content"], validate=True), tesseract_page))
                 case _:
                     raise ValueError("Unknown document kind")
         cfg = self.rt.settings
@@ -52,3 +53,4 @@ class ClinicalActivities:
         return self.rt.audit.json(case, "source", {"payer": "caqh_proview", "profile": profile,
             "expected_draft_id": data["draft_id"], "dates": {"values": fields},
             "documents": data["documents"], "previous": data["previous"]})
+
