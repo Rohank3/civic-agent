@@ -1,4 +1,5 @@
-from pydantic import Field, SecretStr
+from urllib.parse import urlsplit
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,3 +21,13 @@ class Settings(BaseSettings):
     session_ttl: int = Field(default=900, ge=30, le=86400)
     model: str | None = None
     approved_model_endpoint: str | None = None
+
+    @model_validator(mode="after")
+    def protect_temporal_connection(self):
+        address = urlsplit("//" + self.temporal_address)
+        if (not address.hostname or address.username is not None or address.path or address.query
+                or address.fragment or not address.port or any(c.isspace() for c in self.temporal_address)):
+            raise ValueError("Temporal address must be host:port")
+        if not self.temporal_mtls_secret and address.hostname not in {"localhost", "127.0.0.1", "::1"}:
+            raise ValueError("Remote Temporal requires an mTLS credential")
+        return self
