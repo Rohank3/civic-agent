@@ -103,6 +103,34 @@ OFFICIAL_SCHOLARSHIP_CATALOG: list[ScholarshipScheme] = [
 ]
 
 
+# User-isolated custom scheme storage dictionary: {user_id: [ScholarshipScheme, ...]}
+USER_CUSTOM_SCHEMES_STORE: dict[str, list[ScholarshipScheme]] = {}
+
+
+def add_user_custom_scheme(scheme: ScholarshipScheme, user_id: str) -> ScholarshipScheme:
+    """Store a custom scheme strictly scoped to the specified user."""
+    if user_id not in USER_CUSTOM_SCHEMES_STORE:
+        USER_CUSTOM_SCHEMES_STORE[user_id] = []
+    USER_CUSTOM_SCHEMES_STORE[user_id] = [s for s in USER_CUSTOM_SCHEMES_STORE[user_id] if s.id != scheme.id]
+    USER_CUSTOM_SCHEMES_STORE[user_id].append(scheme)
+    logger.info(f"Registered custom scheme '{scheme.id}' for user '{user_id}'")
+    return scheme
+
+
+def get_user_custom_schemes(user_id: str) -> list[ScholarshipScheme]:
+    """Retrieve only the custom schemes belonging to the specified user."""
+    return list(USER_CUSTOM_SCHEMES_STORE.get(user_id, []))
+
+
+def delete_user_custom_scheme(scheme_id: str, user_id: str) -> bool:
+    """Delete a custom scheme scoped to a specific user."""
+    if user_id in USER_CUSTOM_SCHEMES_STORE:
+        initial_len = len(USER_CUSTOM_SCHEMES_STORE[user_id])
+        USER_CUSTOM_SCHEMES_STORE[user_id] = [s for s in USER_CUSTOM_SCHEMES_STORE[user_id] if s.id != scheme_id]
+        return len(USER_CUSTOM_SCHEMES_STORE[user_id]) < initial_len
+    return False
+
+
 class ScholarshipRegistryClient:
     """Live registry client connecting to official Open Government Data (data.gov.in) feeds and statutory catalogs."""
 
@@ -110,9 +138,8 @@ class ScholarshipRegistryClient:
         self.api_key = api_key
         self.base_url = "https://api.data.gov.in/resource"
 
-    async def fetch_live_schemes(self, state: str | None = None) -> list[ScholarshipScheme]:
-        """Fetch active schemes with live criteria."""
-        # If API key is present and configured, query data.gov.in live endpoint
+    async def fetch_live_schemes(self, state: str | None = None, user_id: str | None = None) -> list[ScholarshipScheme]:
+        """Fetch active schemes with live criteria, strictly including only the caller's custom schemes."""
         if self.api_key:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
@@ -125,8 +152,12 @@ class ScholarshipRegistryClient:
             except Exception as exc:
                 logger.warning(f"Data.gov.in live query fell back to statutory cache: {exc}")
 
-        # Return official statutory records
-        return OFFICIAL_SCHOLARSHIP_CATALOG
+        schemes = list(OFFICIAL_SCHOLARSHIP_CATALOG)
+        if user_id:
+            # Strictly pull only this user's custom schemes
+            user_schemes = get_user_custom_schemes(user_id)
+            return user_schemes + schemes
+        return schemes
 
     def evaluate_eligibility(self, profile: CitizenProfile, scheme: ScholarshipScheme) -> SchemeMatchResult:
         """Evaluate citizen profile against statutory scheme eligibility rules."""
@@ -196,8 +227,8 @@ class ScholarshipRegistryClient:
             missing_criteria=missing
         )
 
-    async def match_all_schemes(self, profile: CitizenProfile) -> list[SchemeMatchResult]:
-        schemes = await self.fetch_live_schemes(profile.address_state)
+    async def match_all_schemes(self, profile: CitizenProfile, user_id: str | None = None) -> list[SchemeMatchResult]:
+        schemes = await self.fetch_live_schemes(profile.address_state, user_id=user_id)
         results = [self.evaluate_eligibility(profile, s) for s in schemes]
         # Sort eligible first, then by highest grant amount
         results.sort(key=lambda r: (r.is_eligible, r.scheme.grant_amount_annual), reverse=True)

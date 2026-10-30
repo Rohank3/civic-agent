@@ -150,6 +150,62 @@ class AutonomousBureaucracyAgent:
                     return key
         return None
 
+    async def handle_portal_login(self, username: str, password: str) -> bool:
+        """Detect and authenticate on portals requiring existing user credentials."""
+        password_input = self.page.locator("input[type='password']").first
+        try:
+            if not await password_input.is_visible(timeout=300):
+                return False
+        except Exception:
+            return False
+
+        logger.info("Detected portal login barrier. Submitting credentials...")
+        await self.emit_telemetry(
+            action="LOGIN_DETECTED",
+            details="Portal requires authentication. Populating secure student credentials...",
+            stage="AUTHENTICATING"
+        )
+
+        username_selectors = [
+            "input[type='text']:visible", "input[name*='user']", "input[name*='email']",
+            "input[name*='roll']", "input[name*='login']", "input[id*='user']"
+        ]
+        for sel in username_selectors:
+            try:
+                u_input = self.page.locator(sel).first
+                if await u_input.is_visible(timeout=200):
+                    await u_input.fill(username)
+                    break
+            except Exception:
+                continue
+
+        await password_input.fill(password)
+        await self._pacing_delay()
+
+        login_btn_selectors = [
+            "button:has-text('Login')", "button:has-text('Sign In')",
+            "input[type='submit'][value*='Login']", "input[type='submit'][value*='Sign In']",
+            "#btnLogin", "#login-submit"
+        ]
+        for sel in login_btn_selectors:
+            try:
+                btn = self.page.locator(sel).first
+                if await btn.is_visible(timeout=500):
+                    await btn.click()
+                    try:
+                        await self.page.wait_for_load_state("domcontentloaded", timeout=2000)
+                    except PlaywrightTimeout:
+                        pass
+                    await self.emit_telemetry(
+                        action="LOGIN_COMPLETED",
+                        details="Successfully authenticated. Advancing to scholarship application wizard.",
+                        stage="NAVIGATING"
+                    )
+                    return True
+            except Exception:
+                continue
+        return False
+
     async def scan_and_populate_current_page(self) -> int:
         """Dynamically detect and fill all interactive inputs on the current page."""
         await self.solver.dismiss_overlays_and_modals(self.page)

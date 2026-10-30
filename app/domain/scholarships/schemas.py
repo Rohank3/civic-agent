@@ -6,7 +6,7 @@ class ScholarshipScheme(BaseModel):
     id: str = Field(description="Unique identifier of the scheme")
     name: str = Field(description="Official statutory scholarship title")
     ministry: str = Field(description="Department or Ministry administering the grant")
-    level: Literal["undergraduate", "postgraduate", "secondary", "vocational", "all"]
+    level: Literal["undergraduate", "postgraduate", "secondary", "vocational", "all"] = "undergraduate"
     target_category: list[str] = Field(default_factory=lambda: ["ALL"], description="Eligible categories e.g. SC, ST, OBC, EWS, GENERAL, FEMALE")
     max_family_income: float = Field(description="Annual household income ceiling in INR/currency")
     min_gpa_or_percentage: float = Field(description="Minimum qualifying academic score e.g. 60.0% or 3.0 GPA")
@@ -14,8 +14,31 @@ class ScholarshipScheme(BaseModel):
     application_deadline: str = Field(description="ISO 8601 closing date")
     portal_url: str = Field(description="Official portal entry point")
     required_documents: list[str] = Field(default_factory=list)
-    description: str
+    description: str = ""
     active: bool = True
+    is_custom: bool = False
+    user_id: str | None = None
+    login_mode: Literal["fresh_registration", "credentials", "sso"] = "fresh_registration"
+    credentials_username: str | None = None
+    credentials_password: str | None = None
+
+
+class CustomSchemeCreateRequest(BaseModel):
+    name: str = Field(min_length=2)
+    ministry: str = Field(default="State / Institutional Department")
+    level: Literal["undergraduate", "postgraduate", "secondary", "vocational", "all"] = "undergraduate"
+    target_category: list[str] = Field(default_factory=lambda: ["ALL"])
+    max_family_income: float = Field(default=350000.0)
+    min_gpa_or_percentage: float = Field(default=60.0)
+    grant_amount_annual: float = Field(default=30000.0)
+    application_deadline: str = Field(default="2026-12-31")
+    portal_url: str = Field(min_length=4)
+    description: str = Field(default="User-defined custom portal scheme.")
+    login_mode: Literal["fresh_registration", "credentials", "sso"] = "fresh_registration"
+    credentials_username: str | None = None
+    credentials_password: str | None = None
+    user_id: str = Field(min_length=1, description="Strict owner identifier for user-level isolation")
+
 
 
 class SchemeMatchResult(BaseModel):

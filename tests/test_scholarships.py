@@ -1,6 +1,13 @@
 import pytest
 from app.domain.citizen.schemas import CitizenProfile
-from app.domain.scholarships.client import ScholarshipRegistryClient, OFFICIAL_SCHOLARSHIP_CATALOG
+from app.domain.scholarships.client import (
+    ScholarshipRegistryClient,
+    OFFICIAL_SCHOLARSHIP_CATALOG,
+    add_user_custom_scheme,
+    get_user_custom_schemes,
+    delete_user_custom_scheme,
+)
+from app.domain.scholarships.schemas import ScholarshipScheme
 from app.domain.scholarships.ocr import (
     extract_transcript_data,
     extract_income_certificate_data,
@@ -136,4 +143,48 @@ def test_income_certificate_ocr_and_dual_extraction():
     assert dual_res.auto_populated_profile["full_name"] == "Eleanor Vance"
     assert dual_res.auto_populated_profile["income_annual"] == 180000.0
     assert dual_res.auto_populated_profile["address_state"] == "Karnataka"
+
+
+@pytest.mark.asyncio
+async def test_user_isolated_custom_schemes():
+    client = ScholarshipRegistryClient()
+
+    # User A adds custom scheme
+    scheme_a = ScholarshipScheme(
+        id="custom_portal_alice",
+        name="Alice Private University Grant",
+        ministry="Private Endowment",
+        level="undergraduate",
+        max_family_income=500000.0,
+        min_gpa_or_percentage=70.0,
+        grant_amount_annual=40000.0,
+        application_deadline="2026-12-31",
+        portal_url="https://alice-university.edu/grant",
+        is_custom=True,
+        user_id="user_alice_123",
+        login_mode="credentials"
+    )
+    add_user_custom_scheme(scheme_a, "user_alice_123")
+
+    # Fetch for Alice: should include custom scheme
+    alice_schemes = await client.fetch_live_schemes(user_id="user_alice_123")
+    alice_ids = [s.id for s in alice_schemes]
+    assert "custom_portal_alice" in alice_ids
+
+    # Fetch for Bob: should NOT include Alice's custom scheme
+    bob_schemes = await client.fetch_live_schemes(user_id="user_bob_999")
+    bob_ids = [s.id for s in bob_schemes]
+    assert "custom_portal_alice" not in bob_ids
+
+    # Anonymous / public fetch: should NOT include Alice's custom scheme
+    public_schemes = await client.fetch_live_schemes(user_id=None)
+    public_ids = [s.id for s in public_schemes]
+    assert "custom_portal_alice" not in public_ids
+
+    # Delete for Alice
+    deleted = delete_user_custom_scheme("custom_portal_alice", "user_alice_123")
+    assert deleted is True
+    alice_after = await client.fetch_live_schemes(user_id="user_alice_123")
+    assert "custom_portal_alice" not in [s.id for s in alice_after]
+
 
