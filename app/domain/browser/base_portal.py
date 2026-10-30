@@ -8,7 +8,7 @@ class Portal:
         self.s = profile["selectors"]
 
     async def login(self, code=None):
-        if await self.page.locator(self.s["authenticated"]).count():
+        if await self.page.locator(self.s["authenticated"]).is_visible():
             return "OK"
         if await self.page.locator(self.s["username"]).is_visible():
             await self.page.locator(self.s["username"]).fill(self.cfg["username"])
@@ -42,4 +42,10 @@ class Portal:
                   for field, selector in self.cfg["fields"].items()}
         identity = await self.page.locator(self.s["draft_id"]).inner_text()
         attachments = await self.page.locator(self.s["attachment_names"]).all_text_contents()
-        return {"draft_id": identity, "values": values, "attachments": attachments}
+        controls = await self.page.locator(self.s["draft"]).locator(
+            "input:not([type=hidden]),textarea,select,[contenteditable=true]"
+        ).evaluate_all("""els => els.map(el => ({
+            id: el.name || el.id, type: el.type, value: el.value ?? el.textContent,
+            checked: el.checked, selected: el.selectedOptions && [...el.selectedOptions].map(o => o.value)
+        }))""")
+        return {"draft_id": identity, "values": values, "attachments": attachments, "controls": controls}

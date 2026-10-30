@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from redis.asyncio import Redis
 from sqlalchemy import Column, MetaData, String, Table
 from sqlalchemy.ext.asyncio import create_async_engine
-from temporalio.client import Client
+from temporalio.client import Client, TLSConfig
 from config.settings import Settings
-from .audit import AuditStore
+from .audit import AuditStore, LockedAuditStore
 from .security import Cipher, SafeLogFilter
 from .vault import Vault
 
@@ -35,9 +35,19 @@ class Runtime:
         db = create_async_engine(settings.database_url.get_secret_value(), hide_parameters=True)
         async with db.begin() as conn:
             await conn.run_sync(metadata.create_all)
-        return cls(settings, vault, AuditStore(settings.audit_dir, cipher),
+        if settings.audit_bucket:
+            import boto3
+            audit = LockedAuditStore(boto3.client("s3"), settings.audit_bucket, cipher, settings.retention_days)
+        else:
+            audit = AuditStore(settings.audit_dir, cipher)
+        tls = False
+        if settings.temporal_mtls_secret:
+            certs = await vault.read(settings.temporal_mtls_secret)
+            tls = TLSConfig(server_root_ca_cert=certs["ca"].encode(), client_cert=certs["cert"].encode(),
+                            client_private_key=certs["key"].encode())
+        return cls(settings, vault, audit,
                    Redis.from_url(settings.redis_url.get_secret_value()), db,
-                   await Client.connect(settings.temporal_address, namespace=settings.namespace))
+                   await Client.connect(settings.temporal_address, namespace=settings.namespace, tls=tls))
 
     async def close(self):
         await self.redis.aclose()

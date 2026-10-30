@@ -41,7 +41,7 @@ class ClinicalActivities:
         return self.rt.audit.json(case, "fields", {"values": fields, "evidence": evidence})
 
     @activity.defn
-    async def credential_case(self, case: str, provider: str, profile: str) -> str:
+    async def credential_case(self, case: str, provider: str, profile: str, initiator: str) -> str:
         data = await self.rt.vault.read("providers/" + provider)
         today = date.today()
         fields = {}
@@ -52,5 +52,5 @@ class ClinicalActivities:
             fields[key] = expires.isoformat()
         return self.rt.audit.json(case, "source", {"payer": "caqh_proview", "profile": profile,
             "expected_draft_id": data["draft_id"], "dates": {"values": fields},
-            "documents": data["documents"], "previous": data["previous"]})
+            "documents": data["documents"], "previous": data["previous"], "initiator": initiator})
 

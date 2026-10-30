@@ -18,7 +18,7 @@ async def enroll(body: Enrollment, request: Request, actor=Depends(require("inta
     rt = request.app.state.rt
     identity = "caqh-" + body.provider
     await rt.temporal.create_schedule(identity, Schedule(action=ScheduleActionStartWorkflow(
-        CAQHReattestationWorkflow.run, args=[body.provider, body.profile], id=identity,
+        CAQHReattestationWorkflow.run, args=[body.provider, body.profile, actor], id=identity,
         task_queue=rt.settings.task_queue), spec=ScheduleSpec(intervals=[
             ScheduleIntervalSpec(every=timedelta(days=90))])), trigger_immediately=True)
     return {"schedule": identity}

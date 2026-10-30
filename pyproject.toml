@@ -5,10 +5,15 @@ requires-python = ">=3.12"
 dependencies = [
  "fastapi", "uvicorn", "pydantic>=2", "pydantic-settings", "sqlalchemy[asyncio]>=2",
  "asyncpg", "redis", "temporalio>=1.10,<2", "cryptography", "httpx", "playwright>=1.50", "playwright-stealth>=2,<3",
- "pypdf", "instructor", "litellm", "pgvector"
+ "pypdf", "instructor", "litellm", "pgvector", "boto3"
 ]
 [dependency-groups]
-dev = ["pytest", "pytest-asyncio", "fakeredis"]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "fakeredis",
+    "aiosqlite>=0.22.1",
+]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["."]

@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import tempfile
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from .security import Cipher
 
@@ -45,3 +46,28 @@ class AuditStore:
 
     def read_json(self, case, kind, digest):
         return json.loads(self.get(case, kind, digest))
+
+
+class LockedAuditStore(AuditStore):
+    """Require S3 Object Lock COMPLIANCE on every encrypted artifact."""
+    def __init__(self, client, bucket, cipher, retention_days):
+        self.client = client
+        self.bucket = bucket
+        self.cipher = cipher
+        self.retention_days = retention_days
+
+    def put(self, case, kind, raw):
+        body = self.cipher.seal(raw, f"{case}/{kind}")
+        digest = hashlib.sha256(body).hexdigest()
+        self.client.put_object(Bucket=self.bucket, Key=f"{case}/{kind}/{digest}", Body=body,
+            IfNoneMatch="*", ChecksumAlgorithm="SHA256", ObjectLockMode="COMPLIANCE",
+            ObjectLockRetainUntilDate=datetime.now(timezone.utc) + timedelta(days=self.retention_days))
+        return digest
+
+    def get(self, case, kind, digest):
+        obj = self.client.get_object(Bucket=self.bucket, Key=f"{case}/{kind}/{digest}")
+        with obj["Body"] as stream:
+            body = stream.read()
+        if hashlib.sha256(body).hexdigest() != digest:
+            raise ValueError("Artifact integrity failure")
+        return self.cipher.open(body, f"{case}/{kind}")

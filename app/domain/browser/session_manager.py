@@ -42,6 +42,7 @@ class SessionManager:
                     storage_state=state.get("storage"), record_video_dir=directory,
                     service_workers="block", accept_downloads=False)
                 try:
+                    await ctx.tracing.start(screenshots=True, snapshots=True, sources=False)
                     await Stealth().apply_stealth_async(ctx)
                     await ctx.add_init_script(path=Path(__file__).resolve().parents[3] /
                                               "config/stealth_scripts/profile.js")
@@ -64,7 +65,10 @@ class SessionManager:
                     await self.redis.set(key, self.cipher.seal(raw, key),
                                          ex=min(self.ttl, profile.get("ttl", self.ttl)))
                 finally:
-                    await ctx.close()
+                    try:
+                        await ctx.tracing.stop(path=Path(directory) / "trace.zip")
+                    finally:
+                        await ctx.close()
             finally:
                 await browser.close()
 
@@ -77,3 +81,7 @@ class SessionManager:
                 for path in Path(directory).glob("*.webm"):
                     digest = self.audit.put(case, "video.webm", path.read_bytes())
                     await self.redis.rpush(f"videos:{case}", digest)
+                trace = Path(directory) / "trace.zip"
+                if trace.exists():
+                    digest = self.audit.put(case, "trace.zip", trace.read_bytes())
+                    await self.redis.rpush(f"traces:{case}", digest)

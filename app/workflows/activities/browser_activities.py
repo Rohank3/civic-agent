@@ -99,8 +99,11 @@ class BrowserActivities:
             if sorted(snapshot["attachments"]) != expected:
                 raise ValueError("Attachment mismatch")
             image = self.rt.audit.put(case, "review.png", await portal.page.screenshot(full_page=True))
+            previous = data.get("previous", {})
+            changes = {key: {"previous": previous.get(key), "current": value}
+                       for key, value in values.items() if previous.get(key) != value}
             return self.rt.audit.json(case, "review", {"snapshot": snapshot, "screenshot": image,
-                "fields": fields, "source": ref, "diff": diff, "previous": data.get("previous", {})})
+                "fields": fields, "source": ref, "diff": diff, "changes": changes})
 
     @activity.defn
     async def submit(self, case: str, ref: str, packet: str, signature: str) -> str:
@@ -111,7 +114,7 @@ class BrowserActivities:
         async with self.portal(case, ref) as portal:
             if reviewed["source"] != ref or await portal.snapshot() != reviewed["snapshot"]:
                 raise ValueError("Draft changed after review")
-            self.rt.audit.put(case, "before.html", (await portal.page.content()).encode())
+            before = self.rt.audit.put(case, "before.html", (await portal.page.content()).encode())
             # Commit intent before external side effect. Unknown outcomes require reconciliation.
             async with self.rt.db.begin() as conn:
                 await conn.execute(insert(submissions).values(case_id=case, packet=packet))
@@ -119,7 +122,7 @@ class BrowserActivities:
             receipt = await portal.page.locator(portal.s["receipt"]).inner_text()
             if not receipt.strip():
                 raise ValueError("Receipt required")
-            proof = self.rt.audit.json(case, "receipt", {"receipt": receipt, "signature": signature,
+            proof = self.rt.audit.json(case, "receipt", {"receipt": receipt, "signature": signature, "before": before,
                 "after": self.rt.audit.put(case, "after.html", (await portal.page.content()).encode())})
             async with self.rt.db.begin() as conn:
                 await conn.execute(update(submissions).where(submissions.c.case_id == case).values(receipt=proof))
