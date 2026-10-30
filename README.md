@@ -54,22 +54,23 @@ An autonomous web/browser execution agent powered by Playwright and FastAPI that
 
 ## Quickstart & Local Execution
 
-### 1. Prerequisites
-- Python 3.12+ / Python 3.13
-- Playwright Chromium (`python -m playwright install chromium`)
+### 1. 1-Click Launch (Full-Stack Cockpit + API Gateway)
+```cmd
+run_dev.bat
+```
+- **Split-Screen Web Cockpit**: `http://localhost:5173`
+- **FastAPI API Documentation**: `http://localhost:8000/docs`
 
 ### 2. Run the Full Test Suite
 ```powershell
-# Set PYTHONPATH to project root and site-packages
-$env:PYTHONPATH=".;.venv\Lib\site-packages"
-python -m pytest tests/ -v
+.venv\Scripts\python.exe -m pytest tests/ -v
 ```
 
-### 3. Run the End-to-End Simulation
-Run the live interactive simulation of a student applying for higher education grants:
+### 3. Run the Frontend Verification
 ```powershell
-$env:PYTHONPATH=".;.venv\Lib\site-packages"
-python scripts/simulate_citizen_case.py state_scholarship
+cd frontend
+npm run lint    # 0 warnings, 0 errors
+npm run build   # Verified strict TypeScript build
 ```
 
 ### 4. Launch the Backend API Gateway
