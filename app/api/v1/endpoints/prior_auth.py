@@ -4,8 +4,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from temporalio.client import WorkflowExecutionStatus
-from temporalio.service import RPCError, RPCStatusCode
 from app.api.auth import require
+from app.api.workflow_access import workflow_status
 from app.domain.clinical.extractor import fhir_pages
 from app.workflows.prior_auth_flow import PriorAuthorizationWorkflow
 
@@ -76,14 +76,7 @@ async def intake(body: Intake, request: Request, response: Response, actor=Depen
 
 @router.get("/workflows/{workflow_id}")
 async def status(workflow_id: str, request: Request, actor=Depends(require("staff"))):
-    client = request.app.state.rt.temporal
-    try:
-        desc = await client.get_workflow_handle(workflow_id).describe()
-        state = await client.get_workflow_handle(workflow_id, run_id=desc.run_id).query("status")
-    except RPCError as exc:
-        if exc.status == RPCStatusCode.NOT_FOUND:
-            raise HTTPException(404, "Workflow not found") from None
-        raise
+    desc, _, state = await workflow_status(request.app.state.rt, workflow_id)
     links = {}
     if desc.status == WorkflowExecutionStatus.RUNNING:
         if state["state"] == "HUMAN_REVIEW_WAIT":

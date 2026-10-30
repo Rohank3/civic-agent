@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 from app.api.auth import require
+from app.api.workflow_access import workflow_status
 
 router = APIRouter()
 
@@ -16,10 +17,7 @@ class Challenge(BaseModel):
 
 
 async def pending(rt, workflow_id, expected):
-    handle = rt.temporal.get_workflow_handle(workflow_id)
-    desc = await handle.describe()
-    handle = rt.temporal.get_workflow_handle(workflow_id, run_id=desc.run_id)
-    state = await handle.query("status")
+    desc, handle, state = await workflow_status(rt, workflow_id, require_running=True)
     if state["state"] != expected:
         raise HTTPException(409, "Workflow is not awaiting this action")
     case = desc.run_id if desc.workflow_type == "CAQHReattestationWorkflow" else workflow_id
