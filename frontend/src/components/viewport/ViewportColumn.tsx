@@ -56,6 +56,12 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   const [viewportMode, setViewportMode] = useState<'live' | 'replay'>('live');
   const [replayStep, setReplayStep] = useState<number>(1);
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
+  const lastValidScreenshotRef = React.useRef<string | null>(null);
+
+  if (screenshotBase64) {
+    lastValidScreenshotRef.current = screenshotBase64;
+  }
+  const displayScreenshot = screenshotBase64 || (isExecuting ? lastValidScreenshotRef.current : null);
 
   // Replay playback timer
   useEffect(() => {
@@ -366,7 +372,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
 
               {/* Viewport Frame Area */}
               <div className="flex-1 bg-slate-950 relative overflow-hidden flex flex-col justify-center items-center">
-                {screenshotBase64 ? (
+                {displayScreenshot ? (
                   /* Real Screencast Frame Received from Playwright */
                   <div className="w-full h-full relative flex items-center justify-center p-2 bg-slate-950">
                     <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-slate-950/85 backdrop-blur border border-emerald-500/50 rounded-full px-3 py-1 shadow-xl text-[11px] font-mono text-emerald-300">
@@ -374,7 +380,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                       <span className="font-bold">LIVE PLAYWRIGHT CHROMIUM</span>
                     </div>
                     <img
-                      src={`data:image/jpeg;base64,${screenshotBase64}`}
+                      src={`data:image/jpeg;base64,${displayScreenshot}`}
                       alt="Live Playwright Browser Screencast"
                       className="max-w-full max-h-full object-contain rounded-md shadow-2xl border border-slate-800"
                     />

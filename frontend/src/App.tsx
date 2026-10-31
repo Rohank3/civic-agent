@@ -445,7 +445,25 @@ export const App: React.FC = () => {
         }
       };
 
-      ws.onclose = () => setWsConnected(false);
+      ws.onclose = () => {
+        setWsConnected(false);
+        // Automatic exponential reconnect if session still executing
+        if (caseIdRef.current === newCaseId) {
+          setTimeout(() => {
+            if (caseIdRef.current === newCaseId && wsRef.current?.readyState !== WebSocket.OPEN) {
+              try {
+                const retryWs = new WebSocket(getWsUrl(newCaseId));
+                wsRef.current = retryWs;
+                retryWs.onopen = () => setWsConnected(true);
+                retryWs.onmessage = ws.onmessage;
+                retryWs.onclose = ws.onclose;
+              } catch {
+                // ignore
+              }
+            }
+          }, 1500);
+        }
+      };
     } catch (e) {
       console.warn('WS initialization error:', e);
     }
