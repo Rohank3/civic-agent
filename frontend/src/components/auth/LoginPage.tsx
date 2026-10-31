@@ -17,7 +17,14 @@ import {
 } from 'lucide-react';
 import type { CitizenUser, CitizenProfile } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
-import { getMeriPehchaanConfig, registerCitizen, loginCitizen } from '../../lib/api';
+import { 
+  getMeriPehchaanConfig, 
+  registerCitizen, 
+  loginCitizen,
+  warmupRenderBackend,
+  checkBackendReady,
+  pollUntilBackendReady 
+} from '../../lib/api';
 
 interface LoginPageProps {
   onLogin: (user: CitizenUser) => void;
@@ -30,6 +37,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [isWarmingUp, setIsWarmingUp] = useState(false);
+  const [warmupSeconds, setWarmupSeconds] = useState(0);
 
   // Sign In fields
   const [loginUsername, setLoginUsername] = useState('');
@@ -62,8 +71,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
   } | null>(null);
 
   useEffect(() => {
+    // Immediately ping Render backend upon opening the homepage so cold-start starts in background
+    warmupRenderBackend();
     getMeriPehchaanConfig().then((cfg) => setMeriConfig(cfg));
   }, []);
+
+  // Safe login transition: verify backend is awake, or let user wait comfortably with timer
+  const proceedWithLogin = async (user: CitizenUser) => {
+    setIsLoading(true);
+    const isReady = await checkBackendReady(1500);
+    if (isReady) {
+      setIsLoading(false);
+      onLogin(user);
+      return;
+    }
+
+    // Backend is still spinning up (Render free tier cold start)
+    setIsWarmingUp(true);
+    setWarmupSeconds(1);
+    await pollUntilBackendReady((sec) => {
+      setWarmupSeconds(sec);
+    }, 60);
+
+    setIsWarmingUp(false);
+    setIsLoading(false);
+    onLogin(user);
+  };
 
   // Handle Sign In submission
   const handleSignInSubmit = async (e: React.FormEvent) => {
@@ -77,8 +110,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
 
     try {
       const user = await loginCitizen(loginUsername.trim(), loginPassword);
-      setIsLoading(false);
-      onLogin(user);
+      await proceedWithLogin(user);
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage(err.message || 'Unable to sign in. Please verify your credentials or sign up.');
@@ -110,11 +142,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
         incomeAnnual: regIncome ? parseFloat(regIncome) : 180000.0,
         category: regCategory,
       });
-      setIsLoading(false);
       setSuccessMessage('Account registered successfully! Opening your cockpit...');
-      setTimeout(() => {
-        onLogin(user);
-      }, 400);
+      await proceedWithLogin(user);
     } catch (err: any) {
       setIsLoading(false);
       setErrorMessage(err.message || 'Registration failed. Username might already be in use.');
@@ -122,7 +151,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
   };
 
   // Submit authentic MeriPehchaan / DigiLocker login
-  const handleDigiLockerSubmit = (e: React.FormEvent) => {
+  const handleDigiLockerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!meriFullName.trim()) {
       setErrorMessage('Please enter your full legal name as per Aadhaar / DigiLocker');
@@ -163,29 +192,23 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
       profile,
     };
 
-    setTimeout(() => {
-      setIsLoading(false);
-      onLogin(user);
-    }, 500);
+    await proceedWithLogin(user);
   };
 
   // Quick 1-Click Demo Profiles (explicitly isolated for testing)
-  const handleQuickDemoSelect = (presetIndex: number) => {
+  const handleQuickDemoSelect = async (presetIndex: number) => {
     setIsLoading(true);
     const preset = SAMPLE_PRESETS[presetIndex];
-    setTimeout(() => {
-      setIsLoading(false);
-      const user: CitizenUser = {
-        id: `user_${preset.profile.national_id.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-        username: preset.profile.full_name.toLowerCase().replace(/\s+/g, '_'),
-        fullName: preset.profile.full_name,
-        email: preset.profile.email,
-        role: 'applicant',
-        authMethod: 'demo',
-        profile: preset.profile,
-      };
-      onLogin(user);
-    }, 300);
+    const user: CitizenUser = {
+      id: `user_${preset.profile.national_id.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+      username: preset.profile.full_name.toLowerCase().replace(/\s+/g, '_'),
+      fullName: preset.profile.full_name,
+      email: preset.profile.email,
+      role: 'applicant',
+      authMethod: 'demo',
+      profile: preset.profile,
+    };
+    await proceedWithLogin(user);
   };
 
   return (
@@ -694,6 +717,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
           </div>
         </div>
       </div>
+
+      {/* Render Free Tier Cold-Start Waiting Overlay */}
+      {isWarmingUp && (
+        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-slate-900 border border-blue-500/40 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 mx-auto">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-white">Connecting to CivicAgent Engine</h3>
+              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                Cloud container is waking from standby (Render Free Tier spin-up). Initializing Playwright Chromium runtime...
+              </p>
+            </div>
+            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 h-full transition-all duration-500"
+                style={{ width: `${Math.min(95, Math.max(10, warmupSeconds * 3.5))}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-slate-400 font-mono">
+              Standby timer: {warmupSeconds}s • Entering Cockpit automatically
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

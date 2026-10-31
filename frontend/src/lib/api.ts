@@ -6,8 +6,62 @@ import type {
   AppliedScholarship
 } from '../types';
 
-const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+const DEFAULT_REMOTE_BACKEND = 'https://civic-agent.onrender.com';
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+export const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || (isLocal ? '' : DEFAULT_REMOTE_BACKEND)).replace(/\/$/, '');
 export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/v1` : '/v1';
+
+let isWarmed = false;
+
+export function warmupRenderBackend(): void {
+  if (isWarmed) return;
+  isWarmed = true;
+  const target = BACKEND_URL ? `${BACKEND_URL}/healthz` : '/healthz';
+  try {
+    fetch(target, { method: 'GET', mode: 'cors', cache: 'no-cache' }).catch(() => {
+      // Ignored: silent background wake ping to initiate Render cold-start early
+    });
+  } catch {
+    // ignore
+  }
+}
+
+// Automatically initiate wake-up ping as soon as client loads the homepage
+if (typeof window !== 'undefined') {
+  warmupRenderBackend();
+}
+
+export async function checkBackendReady(timeoutMs = 2500): Promise<boolean> {
+  const target = BACKEND_URL ? `${BACKEND_URL}/healthz` : '/healthz';
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(target, { method: 'GET', mode: 'cors', signal: ctrl.signal });
+    clearTimeout(timer);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function pollUntilBackendReady(
+  onTick?: (elapsedSeconds: number) => void,
+  maxWaitSeconds = 60
+): Promise<boolean> {
+  const isHealthy = await checkBackendReady(2000);
+  if (isHealthy) return true;
+
+  const start = Date.now();
+  while ((Date.now() - start) / 1000 < maxWaitSeconds) {
+    const elapsed = Math.round((Date.now() - start) / 1000);
+    if (onTick) onTick(elapsed);
+    await new Promise((r) => setTimeout(r, 2000));
+    const healthy = await checkBackendReady(2500);
+    if (healthy) return true;
+  }
+  return false;
+}
 
 export function getWsUrl(caseId: string): string {
   if (BACKEND_URL) {
