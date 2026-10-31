@@ -76,6 +76,18 @@ class IncomeCertificateExtractionResult(BaseModel):
     raw_text: str | None = None
 
 
+class DocumentIntegrityReport(BaseModel):
+    status: Literal["VERIFIED", "CLEAN", "TAMPER_SUSPECTED"] = "VERIFIED"
+    quarantine_active: bool = False
+    producer: str | None = None
+    creator: str | None = None
+    modification_divergence: bool = False
+    has_digital_signature: bool = False
+    forensic_findings: list[str] = Field(default_factory=list)
+    tamper_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    recommended_action: Literal["PROCEED", "DIGILOCKER_PULL", "MANUAL_REVIEW"] = "PROCEED"
+
+
 class DualDocumentExtractionResult(BaseModel):
     transcript: TranscriptExtractionResult
     income_certificate: IncomeCertificateExtractionResult
@@ -85,4 +97,5 @@ class DualDocumentExtractionResult(BaseModel):
     sufficiency_score: float = Field(ge=0.0, le=1.0)
     warnings: list[str] = Field(default_factory=list)
     auto_populated_profile: dict[str, Any] = Field(default_factory=dict)
+    integrity_report: DocumentIntegrityReport | None = None
 
