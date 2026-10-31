@@ -51,8 +51,8 @@ async def invalid_input(request, exc):
 @app.get("/portal/scholarship", response_class=HTMLResponse)
 async def local_scholarship_portal():
     """Authentic local multi-step scholarship portal with modal obstacles for offline evaluation."""
-    from tests.test_bureaucracy_agent import LEGACY_PORTAL_HTML
-    return HTMLResponse(content=LEGACY_PORTAL_HTML.decode("utf-8"))
+    from app.api.portal_html import STATUTORY_PORTAL_HTML
+    return HTMLResponse(content=STATUTORY_PORTAL_HTML)
 
 
 @app.middleware("http")
@@ -119,3 +119,17 @@ async def telemetry_websocket(websocket: WebSocket, case_id: str):
                 pass
     except WebSocketDisconnect:
         telemetry_bus.disconnect(case_id, websocket)
+
+
+# Mount built frontend dist folder if present (e.g. single-container containerized deployment)
+import os
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+
+dist_path = Path(__file__).resolve().parent.parent.parent / "dist"
+if not dist_path.exists():
+    dist_path = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
+
+if dist_path.exists():
+    app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="frontend")
+

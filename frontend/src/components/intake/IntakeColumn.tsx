@@ -177,7 +177,25 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                 </span>
               )}
             </span>
-            <span className="text-[10px] text-slate-400">PDF / Image / Text</span>
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <a
+                href="/samples/Official_Transcript_Eleanor_Vance.pdf"
+                download="Official_Transcript_Eleanor_Vance.pdf"
+                className="text-cyan-400 hover:text-cyan-300 underline font-medium"
+                title="Download sample student marksheet PDF to test live upload"
+              >
+                Sample Marksheet
+              </a>
+              <span className="text-slate-600">•</span>
+              <a
+                href="/samples/Statutory_Income_Certificate_Eleanor_Vance.pdf"
+                download="Statutory_Income_Certificate_Eleanor_Vance.pdf"
+                className="text-emerald-400 hover:text-emerald-300 underline font-medium"
+                title="Download sample income certificate PDF to test live upload"
+              >
+                Sample Income Cert
+              </a>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">

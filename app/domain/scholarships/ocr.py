@@ -21,7 +21,7 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
     api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash"
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-2.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
@@ -55,7 +55,7 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
         })
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=15.0) as client:
             resp = client.post(
                 url,
                 json={
@@ -91,7 +91,7 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
     api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash"
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-2.5-flash"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
@@ -127,7 +127,7 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
         })
 
     try:
-        with httpx.Client(timeout=10.0) as client:
+        with httpx.Client(timeout=15.0) as client:
             resp = client.post(
                 url,
                 json={
@@ -193,8 +193,8 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
     institution = None
     major = None
 
-    # GPA patterns: "GPA: 3.8", "CGPA: 8.9", "Grade Point Average: 3.92"
-    gpa_match = re.search(r"(?:CGPA|GPA|Grade Point Average)[\t :]+([0-9]+\.?[0-9]*)", text_content, re.IGNORECASE)
+    # GPA patterns: "GPA: 3.8", "CGPA: 8.9", "Cumulative Grade Point Average (CGPA): 3.85"
+    gpa_match = re.search(r"(?:Cumulative )?(?:CGPA|GPA|Grade Point Average)(?:\s*\([^)]*\))?[\t :]+([0-9]+\.?[0-9]*)", text_content, re.IGNORECASE)
     if gpa_match:
         try:
             val = float(gpa_match.group(1))
@@ -213,7 +213,9 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
             pass
 
     # Student name patterns: "Student Name: Eleanor Vance"
-    name_match = re.search(r"(?:Student Name|Applicant Name|Candidate Name|Name)[\t :]+([A-Za-z. ]{2,50})", text_content, re.IGNORECASE)
+    name_match = re.search(r"(?:Student Name|Applicant Name|Candidate Name)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Roll|Date|Reg|University|College|$)", text_content, re.IGNORECASE)
+    if not name_match:
+        name_match = re.search(r"(?:Name)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Roll|Date|Reg|$)", text_content, re.IGNORECASE)
     if name_match:
         student_name = name_match.group(1).strip()
 
@@ -286,6 +288,12 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
         text_content,
         re.IGNORECASE,
     )
+    if not income_match:
+        income_match = re.search(
+            r"(?:Rs\.?|INR|₹)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?)",
+            text_content,
+            re.IGNORECASE,
+        )
     if income_match:
         try:
             clean_str = income_match.group(1).replace(",", "").strip()
@@ -304,10 +312,16 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
 
     # Applicant Name
     name_match = re.search(
-        r"(?:Applicant Name|Candidate Name|Certified that (?:Mr\.|Ms\.|Shri|Smt\.)?|Name)[\t :]+([A-Za-z. ]{2,50})",
+        r"(?:Applicant Name|Candidate Name|Certified that Applicant:?|Applicant:?)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Ward|Son|Daughter|Resident|District|$)",
         text_content,
         re.IGNORECASE,
     )
+    if not name_match:
+        name_match = re.search(
+            r"(?:Certified that (?:Mr\.|Ms\.|Shri|Smt\.)?|Name)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Ward|Son|Daughter|Resident|District|$)",
+            text_content,
+            re.IGNORECASE,
+        )
     if name_match:
         applicant_name = name_match.group(1).strip()
 
@@ -403,9 +417,14 @@ def extract_dual_documents(
         warnings.append("Applicant name was not found in the uploaded documents. Please review and edit your Citizen Profile.")
         sufficiency_score = max(0.1, round(sufficiency_score - 0.15, 2))
 
+    # Real data validation: check if date of birth was provided
+    extracted_dob = getattr(income_res, "issue_date", "") or ""
+    if not extracted_dob:
+        warnings.append("Date of birth not present in academic marksheet. Defaulting to profile entry.")
+
     auto_profile = {
-        "full_name": primary_name or "Citizen Applicant",
-        "date_of_birth": "2003-01-01",
+        "full_name": primary_name,
+        "date_of_birth": "",
         "national_id": f"ID-{income_res.certificate_number}" if income_res.certificate_number else "",
         "email": f"{primary_name.lower().replace(' ', '.')}@university.edu" if primary_name else "",
         "phone": "",

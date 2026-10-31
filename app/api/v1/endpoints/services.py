@@ -87,16 +87,11 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
             # Check if internal mock-portal target or scholarship portal mirror
             target_url = body.portal_url
             if "portal/scholarship" in target_url or "mock-portal" in target_url or target_url.startswith("http://test"):
+                from app.api.portal_html import STATUTORY_PORTAL_HTML
                 try:
-                    from tests.test_bureaucracy_agent import LEGACY_PORTAL_HTML
-                    html_content = LEGACY_PORTAL_HTML.decode("utf-8") if isinstance(LEGACY_PORTAL_HTML, bytes) else str(LEGACY_PORTAL_HTML)
-                    await page.set_content(html_content, wait_until="domcontentloaded")
-                except Exception as content_err:
-                    logger.warning(f"Set content fallback notice: {content_err}")
-                    try:
-                        await page.goto(target_url, timeout=5000, wait_until="domcontentloaded")
-                    except Exception:
-                        pass
+                    await page.goto(target_url, timeout=3000, wait_until="domcontentloaded")
+                except Exception:
+                    await page.set_content(STATUTORY_PORTAL_HTML, wait_until="domcontentloaded")
             else:
                 try:
                     await page.goto(target_url, timeout=15000, wait_until="domcontentloaded")

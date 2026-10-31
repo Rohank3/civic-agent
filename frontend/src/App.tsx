@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { IntakeColumn } from './components/intake/IntakeColumn';
-import { TraceColumn } from './components/telemetry/TraceColumn';
+import { InspectorDrawer } from './components/telemetry/InspectorDrawer';
 import { ViewportColumn } from './components/viewport/ViewportColumn';
 import { HitlModal } from './components/hitl/HitlModal';
 import { ReceiptModal } from './components/receipt/ReceiptModal';
@@ -32,7 +32,8 @@ import {
   getAppliedScholarships,
   saveAppliedScholarship,
   executeLiveService,
-  controlAgent
+  controlAgent,
+  syncSchemesFromGov
 } from './lib/api';
 
 export const App: React.FC = () => {
@@ -104,6 +105,9 @@ export const App: React.FC = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [isAppliedModalOpen, setIsAppliedModalOpen] = useState<boolean>(false);
+  const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [uploadedDocuments, setUploadedDocuments] = useState<Array<{ name: string; kind: string; content: string }>>([]);
 
   const caseIdRef = useRef<string>('case-2026-001');
   const wsRef = useRef<WebSocket | null>(null);
@@ -154,12 +158,37 @@ export const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
+  const handleSyncLiveData = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await syncSchemesFromGov();
+      const matched = await matchSchemes(profile, userId);
+      setSchemes(matched);
+      addTelemetryEvent(
+        'DATA_GOV_SYNCED',
+        `Live synchronization confirmed with Data.gov.in (${res.schemes_count} statutory schemes verified, digest: ${res.digest}).`,
+        'PREFLIGHT',
+        'STUDENT_INTAKE'
+      );
+    } catch (e) {
+      console.warn('Sync failed:', e);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const handleParseDocuments = async (
     transcript: string, 
     income: string, 
     transcriptName = 'academic_transcript.pdf', 
     incomeName = 'income_certificate.pdf'
   ) => {
+    // Preserve uploaded document payloads for live browser attachment
+    setUploadedDocuments([
+      { name: transcriptName, kind: transcriptName.toLowerCase().endsWith('.png') ? 'image' : 'pdf', content: transcript },
+      { name: incomeName, kind: incomeName.toLowerCase().endsWith('.png') ? 'image' : 'pdf', content: income },
+    ]);
+
     const res = await parseDualDocuments(transcript, income, transcriptName, incomeName);
     setDualDocResult(res);
 
@@ -380,7 +409,7 @@ export const App: React.FC = () => {
         service_id: match.scheme.id,
         portal_url: match.scheme.portal_url,
         profile: profile,
-        documents: [],
+        documents: uploadedDocuments,
       });
     } catch (e) {
       console.error('Failed to launch live Playwright agent:', e);
@@ -493,12 +522,17 @@ export const App: React.FC = () => {
         onEditProfile={() => setIsEditProfileOpen(true)}
         appliedCount={appliedList.length}
         onOpenApplied={() => setIsAppliedModalOpen(true)}
+        isInspectorOpen={isInspectorOpen}
+        onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
+        eventCount={events.length}
+        onSyncLiveData={handleSyncLiveData}
+        isSyncing={isSyncing}
       />
 
-      {/* 3-Column Split-Screen Cockpit Layout */}
-      <main className="flex-1 p-3 sm:p-4 max-w-[1920px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch min-h-[calc(100vh-65px)]">
-        {/* Column 1: Citizen Intake Panel & Scheme Matcher */}
-        <section className="lg:col-span-4 xl:col-span-3 h-[84vh] min-h-[500px]">
+      {/* Modern 2-Column Cockpit Layout (Simplified & Focused) */}
+      <main className="flex-1 p-3 sm:p-4 max-w-[1920px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch min-h-[calc(100vh-65px)]">
+        {/* Column 1: Citizen Intake Panel & Statutory Scheme Matcher */}
+        <section className="lg:col-span-5 h-[85vh] min-h-[500px]">
           <IntakeColumn
             profile={profile}
             dualDocResult={dualDocResult}
@@ -514,16 +548,8 @@ export const App: React.FC = () => {
           />
         </section>
 
-        {/* Column 2: Agent Reasoning Trace & State Machine */}
-        <section className="lg:col-span-4 xl:col-span-4 h-[84vh] min-h-[500px]">
-          <TraceColumn
-            events={events}
-            currentStage={currentStage}
-          />
-        </section>
-
-        {/* Column 3: Live Viewport Screencast & Chapter Cut Controls */}
-        <section className="lg:col-span-4 xl:col-span-5 h-[84vh] min-h-[500px]">
+        {/* Column 2: Live Viewport Screencast, Anti-Bot Controls & HITL Gate */}
+        <section className="lg:col-span-7 h-[85vh] min-h-[500px]">
           <ViewportColumn
             currentStage={currentStage}
             activeActor={activeActor}
@@ -544,6 +570,16 @@ export const App: React.FC = () => {
           />
         </section>
       </main>
+
+      {/* Slide-over AI Reasoning & Telemetry Inspector (Collapsible Judge View) */}
+      <InspectorDrawer
+        isOpen={isInspectorOpen}
+        onClose={() => setIsInspectorOpen(false)}
+        events={events}
+        currentStage={currentStage}
+        activeActor={activeActor}
+        wsConnected={wsConnected}
+      />
 
       {/* Applied Scholarships Registry Modal */}
       <AppliedScholarshipsModal

@@ -47,6 +47,13 @@ async def match_schemes(profile: CitizenProfile, request: Request, user_id: str 
     return await client.match_all_schemes(profile, user_id=user_id)
 
 
+@router.post("/schemes/sync")
+async def sync_schemes(request: Request):
+    """Live trigger synchronizing statutory catalog with official Data.gov.in API feed."""
+    client = ScholarshipRegistryClient()
+    return await client.sync_live_schemes()
+
+
 @router.post("/schemes/custom", response_model=ScholarshipScheme)
 async def create_custom_scheme(body: CustomSchemeCreateRequest, request: Request):
     """Register a custom portal/scheme isolated strictly to the calling user_id."""

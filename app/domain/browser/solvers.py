@@ -19,23 +19,23 @@ class ObstacleSolver:
     async def dismiss_overlays_and_modals(self, page: Page) -> bool:
         """Dismiss cookie banners, announcement dialogs, and alert overlays."""
         dismiss_selectors = [
-            "button:has-text('Accept')", "button:has-text('I Agree')",
-            "button:has-text('Agree & Continue')", "button:has-text('Accept All')",
-            "button:has-text('Dismiss')", "button:has-text('Close')",
+            "#accept-modal", "button:has-text('Accept All')", "button:has-text('Accept')", "button:has-text('I Agree')",
+            "button:has-text('Agree & Continue')", "button:has-text('Dismiss')", "button:has-text('Close')",
             "[aria-label='Close']", ".modal-close", ".cookie-consent-accept",
             "button:has-text('Continue to Application')", "button:has-text('Proceed')"
         ]
-        dismissed = False
-        for selector in dismiss_selectors:
+        for sel in dismiss_selectors:
             try:
-                elem = page.locator(selector).first
-                if await elem.is_visible(timeout=500):
-                    await elem.click()
-                    dismissed = True
-                    await page.wait_for_timeout(300)
+                loc = page.locator(sel)
+                if await loc.count() > 0:
+                    first = loc.first
+                    if await first.is_visible(timeout=100):
+                        await first.click()
+                        await page.wait_for_timeout(100)
+                        return True
             except Exception:
                 continue
-        return dismissed
+        return False
 
     async def handle_checkboxes_and_agreements(self, page: Page) -> int:
         """Check required terms of service, declaration, or certification checkboxes."""

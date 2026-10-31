@@ -6,16 +6,13 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   FileCheck, 
-  KeyRound,
-  RefreshCw,
-  UserCheck,
-  Play,
-  Pause,
-  RotateCcw,
-  Video,
-  Monitor,
-  StepForward,
-  ShieldAlert
+  Play, 
+  Pause, 
+  RotateCcw, 
+  Monitor, 
+  StepForward, 
+  ShieldAlert,
+  Video
 } from 'lucide-react';
 import type { ActorRole, CitizenProfile, ScholarshipScheme, TrackingReceipt } from '../../types';
 
@@ -45,8 +42,8 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   setPacingMode: _setPacingMode,
   onSkipTyping,
   screenshotBase64,
-  currentStep,
-  profile,
+  currentStep: _currentStep,
+  profile: _profile,
   selectedScheme,
   isExecuting,
   onTriggerHitlSignoff: _onTriggerHitlSignoff,
@@ -59,23 +56,6 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   const [viewportMode, setViewportMode] = useState<'live' | 'replay'>('live');
   const [replayStep, setReplayStep] = useState<number>(1);
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
-
-  const [activePortalView, setActivePortalView] = useState<'form' | 'login'>(
-    selectedScheme?.login_mode === 'credentials' ? 'login' : 'form'
-  );
-  const [loginUsername, setLoginUsername] = useState(
-    selectedScheme?.credentials_username || profile.email || 'citizen_applicant'
-  );
-  const [loginPassword, setLoginPassword] = useState('••••••••••••');
-  const [captchaCode, setCaptchaCode] = useState('7Kx9M');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  const defaultUser = selectedScheme?.credentials_username || profile.email || 'citizen_applicant';
-  const [prevDefaultUser, setPrevDefaultUser] = useState(defaultUser);
-  if (defaultUser !== prevDefaultUser) {
-    setPrevDefaultUser(defaultUser);
-    setLoginUsername(defaultUser);
-  }
 
   // Replay playback timer
   useEffect(() => {
@@ -378,33 +358,9 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                   </span>
                 </div>
 
-                <div className="flex items-center gap-1 text-[11px]">
-                  {selectedScheme?.login_mode === 'credentials' && (
-                    <button
-                      type="button"
-                      onClick={() => setActivePortalView(activePortalView === 'login' ? 'form' : 'login')}
-                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
-                        activePortalView === 'login'
-                          ? 'bg-blue-600 text-white font-semibold'
-                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                      }`}
-                    >
-                      <KeyRound className="w-3 h-3" />
-                      <span>Portal Login</span>
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setActivePortalView('form')}
-                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
-                      activePortalView === 'form'
-                        ? 'bg-blue-600 text-white font-semibold'
-                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <FileCheck className="w-3 h-3" />
-                    <span>Scheme Wizard</span>
-                  </button>
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-slate-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                  <span>Chromium 1280×800</span>
                 </div>
               </div>
 
@@ -439,192 +395,90 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                     </div>
                   </div>
                 ) : (
-                  /* Standby Interactive Portal Preview */
-                  <div className="p-4 w-full h-full overflow-y-auto font-sans text-slate-200 space-y-4">
-                    {/* View A: Portal Login Screen */}
-                    {activePortalView === 'login' ? (
-                      <div className="max-w-md mx-auto my-auto py-2 space-y-4">
-                        <div className="text-center border-b border-slate-800 pb-3">
-                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 mb-2">
-                            <KeyRound className="w-5 h-5" />
-                          </div>
-                          <h3 className="font-bold text-sm text-white">
-                            {selectedScheme?.name || 'National Scholarship Portal (NSP)'}
-                          </h3>
-                          <p className="text-[11px] text-slate-400">
-                            Official Government Applicant Login & Access Gateway
-                          </p>
+                  /* Standby Authentic Execution Ready State */
+                  <div className="p-6 w-full h-full overflow-y-auto font-sans text-slate-200 flex flex-col justify-center items-center">
+                    <div className="max-w-md w-full bg-slate-900/90 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5 text-center">
+                      <div className="relative mx-auto w-14 h-14">
+                        <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600/30 to-indigo-600/30 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                          <Monitor className="w-7 h-7" />
                         </div>
-
-                        <div className="space-y-3 text-xs bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
-                          <div>
-                            <label className="text-slate-400 block mb-1 font-medium">Application ID / Registered Email</label>
-                            <input
-                              type="text"
-                              value={loginUsername}
-                              onChange={(e) => setLoginUsername(e.target.value)}
-                              className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-                              placeholder="e.g. citizen_applicant or email@portal.gov.in"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-slate-400 block mb-1 font-medium">Password / Access Passkey</label>
-                            <input
-                              type="password"
-                              value={loginPassword}
-                              onChange={(e) => setLoginPassword(e.target.value)}
-                              className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-                              placeholder="••••••••••••"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-slate-400 block mb-1 font-medium">Captcha Verification</label>
-                            <div className="flex items-center gap-2">
-                              <div className="px-3 py-1 bg-slate-900 border border-slate-700 rounded font-mono font-bold tracking-widest text-emerald-400 select-none text-sm">
-                                {captchaCode}
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setCaptchaCode(Math.random().toString(36).slice(2, 7).toUpperCase())}
-                                className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                                title="Refresh Captcha"
-                              >
-                                <RefreshCw className="w-3.5 h-3.5" />
-                              </button>
-                              <input
-                                type="text"
-                                defaultValue={captchaCode}
-                                className="flex-1 bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="pt-2 flex flex-col gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsLoggingIn(true);
-                                setTimeout(() => {
-                                  setIsLoggingIn(false);
-                                  setActivePortalView('form');
-                                }, 600);
-                              }}
-                              disabled={isLoggingIn}
-                              className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20"
-                            >
-                              {isLoggingIn ? (
-                                <>
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                                  <span>Injecting Credentials via Playwright...</span>
-                                </>
-                              ) : (
-                                <>
-                                  <UserCheck className="w-3.5 h-3.5" />
-                                  <span>Sign In to Portal & Open Wizard</span>
-                                </>
-                              )}
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => setActivePortalView('form')}
-                              className="w-full py-1.5 text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                            >
-                              Skip Login (Fresh Registration Mode)
-                            </button>
-                          </div>
-                        </div>
+                        <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950" />
                       </div>
-                    ) : (
-                      /* Standby Wizard Form Preview */
-                      <div className="space-y-4">
-                        <div className="border-b border-slate-700/60 pb-3 flex items-start justify-between">
-                          <div>
-                            <h3 className="font-bold text-sm text-white">
-                              {selectedScheme ? selectedScheme.name : 'State Public Scholarship & Grant Portal'}
-                            </h3>
-                            <p className="text-[11px] text-slate-400">
-                              Official Application Form for Higher Education Financial Aid
-                            </p>
-                          </div>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                            Step {currentStep} of 3
-                          </span>
+
+                      <div className="space-y-1">
+                        <h3 className="font-bold text-base text-white">
+                          Playwright Viewport Standby
+                        </h3>
+                        <p className="text-xs text-slate-400">
+                          Stealth Headless Chromium Engine Initialized
+                        </p>
+                      </div>
+
+                      {/* Portal Target Card */}
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/80 text-left space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-[11px] text-slate-400">
+                          <span className="font-medium text-slate-400">Target Statutory Portal:</span>
+                          <span className="text-emerald-400 font-mono font-bold">READY</span>
                         </div>
-
-                        {/* Step 1 Preview */}
-                        <div className="space-y-3 text-xs">
-                          <div className="p-2.5 rounded bg-blue-950/30 border border-blue-800/40 text-[11px] text-blue-200 flex items-center gap-2">
-                            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                            <span>Ready to execute with Playwright stealth browser and live screencast.</span>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div>
-                              <label className="text-slate-400 block mb-1">Full Legal Name</label>
-                              <input
-                                type="text"
-                                readOnly
-                                value={profile.full_name}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-medium"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-slate-400 block mb-1">National ID / Aadhaar</label>
-                              <input
-                                type="text"
-                                readOnly
-                                value={profile.national_id}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-mono"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-slate-400 block mb-1">Contact Email</label>
-                              <input
-                                type="text"
-                                readOnly
-                                value={profile.email}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-slate-400 block mb-1">Phone Number</label>
-                              <input
-                                type="text"
-                                readOnly
-                                value={profile.phone || '9876543210'}
-                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-mono"
-                              />
-                            </div>
-                          </div>
+                        <div className="flex items-center gap-2 p-2 rounded bg-slate-900 border border-slate-800 text-xs font-mono text-blue-300 overflow-hidden">
+                          <Globe className="w-4 h-4 text-blue-400 shrink-0" />
+                          <span className="truncate">{selectedScheme?.portal_url || 'http://localhost:8000/portal/scholarship'}</span>
                         </div>
-
-                        {receipt && (
-                          <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 space-y-2.5 animate-in fade-in">
-                            <div className="flex items-center gap-2 font-semibold text-white">
-                              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                              <span>Statutory Citizen Declaration Signed & Cryptographically Sealed</span>
-                            </div>
-                            <p className="text-[11px] text-slate-300">
-                              Your legal consent was verified and filed with the State Registry. Official Tracking ID:{' '}
-                              <strong className="font-mono text-emerald-300 font-bold">{receipt.tracking_number}</strong>.
-                            </p>
-                            {onOpenReceipt && (
-                              <button
-                                type="button"
-                                onClick={onOpenReceipt}
-                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
-                              >
-                                <FileCheck className="w-3.5 h-3.5" />
-                                <span>View Tracking Receipt</span>
-                              </button>
-                            )}
+                        {selectedScheme && (
+                          <div className="pt-1 text-[11px] text-slate-300">
+                            <strong>Target Scheme:</strong> {selectedScheme.name}
                           </div>
                         )}
                       </div>
-                    )}
+
+                      {/* Readiness Badges */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] text-left">
+                        <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800 flex items-center gap-1.5 text-slate-300">
+                          <ShieldCheck className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span>Stealth Anti-Bot Cadence</span>
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-950/50 border border-slate-800 flex items-center gap-1.5 text-slate-300">
+                          <Lock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                          <span>HITL Signature Gate</span>
+                        </div>
+                      </div>
+
+                      {/* External Portal Testbed Link */}
+                      <div className="pt-1 flex items-center justify-center gap-2">
+                        <a
+                          href={selectedScheme?.portal_url || 'http://localhost:8000/portal/scholarship'}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1"
+                        >
+                          <span>Open Target Portal in Browser Tab</span>
+                          <Globe className="w-3 h-3" />
+                        </a>
+                      </div>
+
+                      {/* Receipt Status (if submitted) */}
+                      {receipt && (
+                        <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 space-y-2 text-left animate-in fade-in">
+                          <div className="flex items-center gap-2 font-semibold text-white text-xs">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                            <span>Statutory Application Confirmed & Sealed</span>
+                          </div>
+                          <p className="text-[11px] text-slate-300">
+                            Tracking ID: <strong className="font-mono text-emerald-300">{receipt.tracking_number}</strong>
+                          </p>
+                          {onOpenReceipt && (
+                            <button
+                              type="button"
+                              onClick={onOpenReceipt}
+                              className="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
+                            >
+                              <FileCheck className="w-3.5 h-3.5" />
+                              <span>View Official Tracking Receipt</span>
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut, Award } from 'lucide-react';
+import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut, Award, Terminal } from 'lucide-react';
 import type { ActorRole, CitizenUser } from '../types';
 
 interface NavbarProps {
@@ -11,6 +11,11 @@ interface NavbarProps {
   onEditProfile?: () => void;
   appliedCount?: number;
   onOpenApplied?: () => void;
+  isInspectorOpen?: boolean;
+  onToggleInspector?: () => void;
+  eventCount?: number;
+  onSyncLiveData?: () => void;
+  isSyncing?: boolean;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ 
@@ -22,6 +27,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onEditProfile,
   appliedCount = 0,
   onOpenApplied,
+  isInspectorOpen = false,
+  onToggleInspector,
+  eventCount = 0,
+  onSyncLiveData,
+  isSyncing = false,
 }) => {
   const getActorBadge = () => {
     switch (activeActor) {
@@ -52,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 CivicAgent
               </span>
               <span className="px-2 py-0.5 text-[10px] font-semibold tracking-wider rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase">
-                Split-Screen Cockpit
+                Autonomous Cockpit
               </span>
             </div>
             <p className="text-[11px] text-slate-400 hidden sm:block">
@@ -69,11 +79,42 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{badge.label}</span>
           </div>
 
-          {/* Zero Dummy Data Indicator */}
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-            <Database className="w-3.5 h-3.5 text-cyan-400" />
-            <span>Live <strong className="text-white">data.gov.in</strong> Catalog</span>
-          </div>
+          {/* Live Data.gov.in Sync Button */}
+          {onSyncLiveData && (
+            <button
+              type="button"
+              onClick={onSyncLiveData}
+              disabled={isSyncing}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs text-slate-300 transition-colors cursor-pointer"
+              title="Click to perform live Data.gov.in API catalog sync"
+            >
+              <Database className={`w-3.5 h-3.5 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Data.gov.in</span>
+              <span className="text-[10px] text-emerald-400 font-mono font-bold">LIVE SYNC</span>
+            </button>
+          )}
+
+          {/* AI Reasoning & Audit Inspector Button (Judge Toggle) */}
+          {onToggleInspector && (
+            <button
+              type="button"
+              onClick={onToggleInspector}
+              className={`px-3 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+                isInspectorOpen
+                  ? 'bg-indigo-600 text-white ring-2 ring-indigo-400 shadow-indigo-500/30'
+                  : 'bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300'
+              }`}
+              title="Toggle AI Reasoning & Execution Telemetry Inspector (Judge View)"
+            >
+              <Terminal className="w-3.5 h-3.5 text-indigo-400" />
+              <span>AI Inspector</span>
+              {eventCount > 0 && (
+                <span className="px-1.5 py-0.2 bg-indigo-500/30 text-indigo-200 text-[10px] rounded-full font-mono">
+                  {eventCount}
+                </span>
+              )}
+            </button>
+          )}
 
           {/* Telemetry Stream Indicator */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
