@@ -678,6 +678,23 @@ export async function executeLiveService(payload: {
   return await res.json();
 }
 
+export async function executeBatchServices(payload: {
+  profile: CitizenProfile;
+  scheme_ids?: string[];
+  documents?: Array<{ name: string; kind: string; content: string }>;
+}): Promise<{ status: string; total_eligible: number; executed_cases: Array<{ scheme_id: string; scheme_name: string; case_id: string; portal_url: string; telemetry_ws: string; status: string }> }> {
+  const res = await fetch(`${API_BASE}/services/execute-batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to launch batch application session');
+  }
+  return await res.json();
+}
+
 export async function controlAgent(caseId: string, action: string, mode?: string): Promise<void> {
   try {
     await fetch(`${API_BASE}/services/${encodeURIComponent(caseId)}/control`, {

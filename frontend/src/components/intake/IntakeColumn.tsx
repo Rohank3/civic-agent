@@ -17,7 +17,9 @@ import {
   Edit2,
   AlertTriangle,
   ShieldAlert,
-  ExternalLink
+  ExternalLink,
+  RefreshCw,
+  Layers
 } from 'lucide-react';
 import type { CitizenProfile, SchemeMatchResult, DualDocumentExtractionResult } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
@@ -42,6 +44,9 @@ interface IntakeColumnProps {
   appliedCount?: number;
   onOpenAppliedModal?: () => void;
   onVerifyDigiLocker?: () => void;
+  onApplyAllEligible?: () => void;
+  onSyncLiveData?: () => void;
+  isSyncing?: boolean;
   isVaultActive?: boolean;
   vaultDocumentNames?: { transcript?: string; income?: string };
   onClearVault?: () => void;
@@ -60,6 +65,9 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
   appliedCount = 0,
   onOpenAppliedModal,
   onVerifyDigiLocker,
+  onApplyAllEligible,
+  onSyncLiveData,
+  isSyncing = false,
   isVaultActive = false,
   vaultDocumentNames,
   onClearVault,
@@ -177,12 +185,11 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
           ]);
           await onParseDocuments(tBase64, iBase64, transcriptName, incomeName);
         } else {
-          await onParseDocuments(preset.transcriptText, preset.incomeCertText, `${preset.name}_Transcript.txt`, `${preset.name}_IncomeCert.txt`);
+          console.warn('Sample PDF files not available at static path');
         }
       }
     } catch (err) {
       console.error('Failed to load authentic sample PDF', err);
-      await onParseDocuments(preset.transcriptText, preset.incomeCertText);
     } finally {
       setIsParsing(false);
     }
@@ -601,16 +608,49 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                 </button>
               )}
             </div>
-            <button
-              onClick={onOpenAddModal}
-              disabled={isExecuting}
-              className="px-2 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 active:bg-cyan-600/70 border border-cyan-500/40 text-cyan-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-              title="Add a custom government, state, or college scholarship portal"
-            >
-              <PlusCircle className="w-3 h-3" />
-              <span>+ Add Custom Portal</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {onSyncLiveData && (
+                <button
+                  type="button"
+                  onClick={onSyncLiveData}
+                  disabled={isExecuting || isSyncing}
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 text-slate-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  title="Scrape and sync live scholarships directly from National Scholarship Portal (scholarships.gov.in)"
+                >
+                  <RefreshCw className={`w-3 h-3 text-blue-400 ${isSyncing ? 'animate-spin' : ''}`} />
+                  <span>{isSyncing ? 'Scraping Web...' : 'Fetch Live NSP'}</span>
+                </button>
+              )}
+              <button
+                onClick={onOpenAddModal}
+                disabled={isExecuting}
+                className="px-2 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 active:bg-cyan-600/70 border border-cyan-500/40 text-cyan-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
+                title="Add a custom government, state, or college scholarship portal"
+              >
+                <PlusCircle className="w-3 h-3" />
+                <span>+ Custom Portal</span>
+              </button>
+            </div>
           </div>
+
+          {/* Batch Apply to All Eligible Button */}
+          {schemes.filter((m) => m.is_eligible).length > 0 && onApplyAllEligible && (
+            <button
+              type="button"
+              onClick={onApplyAllEligible}
+              disabled={isExecuting}
+              className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white font-bold text-xs flex items-center justify-between shadow-lg shadow-emerald-500/10 transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+              title="Autonomous Subagents will apply to each eligible scholarship across their respective portals"
+            >
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-emerald-200" />
+                <span>Apply to All Eligible Schemes ({schemes.filter((m) => m.is_eligible).length})</span>
+              </div>
+              <span className="text-[11px] font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-400/30">
+                ₹{schemes.filter((m) => m.is_eligible).reduce((acc, curr) => acc + curr.scheme.grant_amount_annual, 0).toLocaleString()}/yr Total
+              </span>
+            </button>
+          )}
 
           <div className="space-y-2">
             {schemes.map((match) => {

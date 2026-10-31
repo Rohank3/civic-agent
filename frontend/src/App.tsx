@@ -30,7 +30,8 @@ import {
   getCitizenProfile, 
   getAppliedScholarships, 
   saveAppliedScholarship, 
-  syncSchemesFromGov 
+  syncSchemesFromGov,
+  executeBatchServices 
 } from './lib/api';
 import { 
   executionStore, 
@@ -423,6 +424,46 @@ export const App: React.FC = () => {
     await executionStore.startExecution(match.scheme, profile, uploadedDocuments);
   }, [dualDocResult, executionStatus.isExecuting, profile, uploadedDocuments]);
 
+  const handleApplyAllEligible = useCallback(async () => {
+    if (executionStatus.isExecuting) return;
+    const eligibleMatches = schemes.filter((m) => m.is_eligible);
+    if (eligibleMatches.length === 0) {
+      alert('No eligible scholarships found for current profile. Please check eligibility criteria or update profile.');
+      return;
+    }
+
+    if (dualDocResult?.integrity_report?.quarantine_active) {
+      alert('Execution Blocked: Pre-flight document integrity quarantine active. Please resolve via DigiLocker direct pull.');
+      return;
+    }
+
+    setMobileTab('viewport');
+
+    executionStore.addLocalEvent(
+      'BATCH_EXECUTION_INITIATED',
+      `Orchestrating autonomous applications across ${eligibleMatches.length} eligible statutory schemes.`,
+      'PREFLIGHT',
+      'STUDENT_INTAKE'
+    );
+
+    // Run first eligible scheme immediately in live viewport session
+    const targetMatch = eligibleMatches[0];
+    setSelectedScheme(targetMatch.scheme);
+    setActiveReceipt(null);
+    await executionStore.startExecution(targetMatch.scheme, profile, uploadedDocuments);
+
+    // Also dispatch batch execution plan to backend
+    try {
+      await executeBatchServices({
+        profile,
+        scheme_ids: eligibleMatches.map((m) => m.scheme.id),
+        documents: uploadedDocuments,
+      });
+    } catch (e) {
+      console.warn('Batch service registration notice:', e);
+    }
+  }, [executionStatus.isExecuting, schemes, dualDocResult, profile, uploadedDocuments]);
+
   const handleAuthorizeSubmission = useCallback(async (signatureDataUrl: string) => {
     setHitlOpen(false);
     await executionStore.authorizeSignature(signatureDataUrl);
@@ -612,6 +653,9 @@ export const App: React.FC = () => {
               appliedCount={appliedList.length}
               onOpenAppliedModal={() => setIsAppliedModalOpen(true)}
               onVerifyDigiLocker={handleDigiLockerBypass}
+              onApplyAllEligible={handleApplyAllEligible}
+              onSyncLiveData={handleSyncLiveData}
+              isSyncing={isSyncing}
               isVaultActive={isVaultActive}
               vaultDocumentNames={vaultDocNames}
               onClearVault={handleClearVault}
