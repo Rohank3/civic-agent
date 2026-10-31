@@ -144,3 +144,44 @@ async def ocr_dual_documents(body: DualDocumentUploadRequest):
     )
     return result
 
+
+class SampleDocumentPersonaResponse(BaseModel):
+    persona_id: str
+    transcript_file_name: str
+    transcript_content: str
+    income_file_name: str
+    income_content: str
+
+
+@router.get("/schemes/sample-documents/{persona_id}", response_model=SampleDocumentPersonaResponse)
+async def get_sample_document_payloads(persona_id: str):
+    """Retrieve raw PDF base64 payloads of authentic sample student documents for live multimodal AI verification."""
+    import os
+    base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "sample_documents")
+    
+    if persona_id == "rural_merit":
+        t_file = "Official_Transcript_Eleanor_Vance.pdf"
+        i_file = "Statutory_Income_Certificate_Eleanor_Vance.pdf"
+    else:
+        t_file = "Academic_Marksheet_Aarav_Sharma.pdf"
+        i_file = "Income_Certificate_Aarav_Sharma.pdf"
+
+    t_path = os.path.join(base_dir, t_file)
+    i_path = os.path.join(base_dir, i_file)
+
+    if not os.path.exists(t_path) or not os.path.exists(i_path):
+        raise HTTPException(status_code=404, detail="Sample documents not found on server disk")
+
+    with open(t_path, "rb") as f:
+        t_b64 = base64.b64encode(f.read()).decode("ascii")
+    with open(i_path, "rb") as f:
+        i_b64 = base64.b64encode(f.read()).decode("ascii")
+
+    return SampleDocumentPersonaResponse(
+        persona_id=persona_id,
+        transcript_file_name=t_file,
+        transcript_content=t_b64,
+        income_file_name=i_file,
+        income_content=i_b64
+    )
+

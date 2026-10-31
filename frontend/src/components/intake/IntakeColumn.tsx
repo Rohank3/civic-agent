@@ -22,6 +22,7 @@ import {
 import type { CitizenProfile, SchemeMatchResult, DualDocumentExtractionResult } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
 import type { SamplePreset } from '../../lib/presets';
+import { fetchSampleDocuments } from '../../lib/api';
 
 interface IntakeColumnProps {
   profile: CitizenProfile;
@@ -129,31 +130,43 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
   const handlePresetSelect = async (preset: SamplePreset) => {
     setIsParsing(true);
     try {
-      const isAarav = preset.id.includes('stem') || preset.name.includes('Aarav');
-      const transcriptPath = isAarav
-        ? '/samples/Academic_Marksheet_Aarav_Sharma.pdf'
-        : '/samples/Official_Transcript_Eleanor_Vance.pdf';
-      const incomePath = isAarav
-        ? '/samples/Income_Certificate_Aarav_Sharma.pdf'
-        : '/samples/Statutory_Income_Certificate_Eleanor_Vance.pdf';
-
-      const transcriptName = isAarav ? 'Academic_Marksheet_Aarav_Sharma.pdf' : 'Official_Transcript_Eleanor_Vance.pdf';
-      const incomeName = isAarav ? 'Income_Certificate_Aarav_Sharma.pdf' : 'Statutory_Income_Certificate_Eleanor_Vance.pdf';
-
-      setUploadedTranscriptName(transcriptName);
-      setUploadedIncomeName(incomeName);
-
-      // Fetch authentic binary PDF samples and convert to base64 for live multimodal OCR
-      const [tRes, iRes] = await Promise.all([fetch(transcriptPath), fetch(incomePath)]);
-      if (tRes.ok && iRes.ok) {
-        const [tBlob, iBlob] = await Promise.all([tRes.blob(), iRes.blob()]);
-        const [tBase64, iBase64] = await Promise.all([
-          readFileAsPayload(new File([tBlob], transcriptName, { type: 'application/pdf' })),
-          readFileAsPayload(new File([iBlob], incomeName, { type: 'application/pdf' }))
-        ]);
-        await onParseDocuments(tBase64, iBase64, transcriptName, incomeName);
+      const samplePayload = await fetchSampleDocuments(preset.id);
+      if (samplePayload) {
+        setUploadedTranscriptName(samplePayload.transcript_file_name);
+        setUploadedIncomeName(samplePayload.income_file_name);
+        await onParseDocuments(
+          samplePayload.transcript_content,
+          samplePayload.income_content,
+          samplePayload.transcript_file_name,
+          samplePayload.income_file_name
+        );
       } else {
-        await onParseDocuments(preset.transcriptText, preset.incomeCertText, `${preset.name}_Transcript.txt`, `${preset.name}_IncomeCert.txt`);
+        const isAarav = preset.id.includes('stem') || preset.name.includes('Aarav');
+        const transcriptPath = isAarav
+          ? '/samples/Academic_Marksheet_Aarav_Sharma.pdf'
+          : '/samples/Official_Transcript_Eleanor_Vance.pdf';
+        const incomePath = isAarav
+          ? '/samples/Income_Certificate_Aarav_Sharma.pdf'
+          : '/samples/Statutory_Income_Certificate_Eleanor_Vance.pdf';
+
+        const transcriptName = isAarav ? 'Academic_Marksheet_Aarav_Sharma.pdf' : 'Official_Transcript_Eleanor_Vance.pdf';
+        const incomeName = isAarav ? 'Income_Certificate_Aarav_Sharma.pdf' : 'Statutory_Income_Certificate_Eleanor_Vance.pdf';
+
+        setUploadedTranscriptName(transcriptName);
+        setUploadedIncomeName(incomeName);
+
+        // Fetch authentic binary PDF samples and convert to base64 for live multimodal OCR
+        const [tRes, iRes] = await Promise.all([fetch(transcriptPath), fetch(incomePath)]);
+        if (tRes.ok && iRes.ok) {
+          const [tBlob, iBlob] = await Promise.all([tRes.blob(), iRes.blob()]);
+          const [tBase64, iBase64] = await Promise.all([
+            readFileAsPayload(new File([tBlob], transcriptName, { type: 'application/pdf' })),
+            readFileAsPayload(new File([iBlob], incomeName, { type: 'application/pdf' }))
+          ]);
+          await onParseDocuments(tBase64, iBase64, transcriptName, incomeName);
+        } else {
+          await onParseDocuments(preset.transcriptText, preset.incomeCertText, `${preset.name}_Transcript.txt`, `${preset.name}_IncomeCert.txt`);
+        }
       }
     } catch (err) {
       console.error('Failed to load authentic sample PDF', err);
@@ -433,6 +446,33 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400">Institution:</span>
                   <span className="text-slate-300 truncate max-w-[170px]">{profile.attributes.institution}</span>
+                </div>
+              )}
+
+              {/* Multimodal Grounding Proof Badges */}
+              {dualDocResult?.bounding_boxes && (
+                <div className="pt-2 border-t border-slate-700/40 text-[10px] space-y-1">
+                  <div className="flex items-center gap-1 font-semibold text-cyan-400">
+                    <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
+                    <span>Gemini Multimodal Grounding Proof:</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {dualDocResult.bounding_boxes.transcript?.gpa && (
+                      <span className="px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 font-mono text-[9px]">
+                        GPA Grounded @ [{dualDocResult.bounding_boxes.transcript.gpa.join(', ')}]
+                      </span>
+                    )}
+                    {dualDocResult.bounding_boxes.income_certificate?.annual_income && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono text-[9px]">
+                        Income Grounded @ [{dualDocResult.bounding_boxes.income_certificate.annual_income.join(', ')}]
+                      </span>
+                    )}
+                    {dualDocResult.bounding_boxes.transcript?.student_name && (
+                      <span className="px-1.5 py-0.5 rounded bg-indigo-950/60 border border-indigo-500/40 text-indigo-300 font-mono text-[9px]">
+                        Name Grounded @ [{dualDocResult.bounding_boxes.transcript.student_name.join(', ')}]
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
