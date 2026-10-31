@@ -8,69 +8,6 @@ import type {
 
 const API_BASE = '/v1';
 
-export const OFFICIAL_FALLBACK_SCHEMES: ScholarshipScheme[] = [
-  {
-    id: 'central_sector_college',
-    name: 'Central Sector Scheme of Scholarship for College and University Students',
-    ministry: 'Department of Higher Education, Ministry of Education',
-    level: 'undergraduate',
-    target_category: ['ALL', 'GENERAL', 'OBC', 'SC', 'ST'],
-    max_family_income: 450000.0,
-    min_gpa_or_percentage: 80.0,
-    grant_amount_annual: 20000.0,
-    application_deadline: '2026-11-30',
-    portal_url: 'https://scholarships.gov.in',
-    required_documents: ['Class 12 Marksheet', 'Income Certificate', 'Aadhaar Card'],
-    description: 'Financial support to meritorious students from low-income families to meet day-to-day expenses while pursuing higher studies.',
-    active: true,
-  },
-  {
-    id: 'aicte_pragati_girls',
-    name: 'AICTE Pragati Scholarship Scheme for Girl Students (Technical Degree)',
-    ministry: 'All India Council for Technical Education (AICTE)',
-    level: 'undergraduate',
-    target_category: ['FEMALE', 'ALL'],
-    max_family_income: 800000.0,
-    min_gpa_or_percentage: 60.0,
-    grant_amount_annual: 50000.0,
-    application_deadline: '2026-12-15',
-    portal_url: 'https://aicte-pragati.gov.in',
-    required_documents: ['College Admission Receipt', 'Income Proof', 'Tuition Fee Proof'],
-    description: 'Empowers young women to pursue technical education with Rs. 50,000 per annum towards college fee and study materials.',
-    active: true,
-  },
-  {
-    id: 'post_matric_sc_st',
-    name: 'Post-Matric Scholarship Scheme for SC/ST Candidates',
-    ministry: 'Ministry of Social Justice and Empowerment',
-    level: 'all',
-    target_category: ['SC', 'ST'],
-    max_family_income: 250000.0,
-    min_gpa_or_percentage: 50.0,
-    grant_amount_annual: 35000.0,
-    application_deadline: '2027-01-31',
-    portal_url: 'https://socialjustice.gov.in',
-    required_documents: ['Caste Certificate', 'Family Income Certificate', 'Previous Year Marksheet'],
-    description: '100% compulsory non-refundable fees covered alongside maintenance allowance for socially backward categories.',
-    active: true,
-  },
-  {
-    id: 'state_merit_means',
-    name: 'State Higher Education Merit-cum-Means Statutory Grant',
-    ministry: 'State Higher Education Department',
-    level: 'undergraduate',
-    target_category: ['ALL', 'EWS', 'OBC'],
-    max_family_income: 300000.0,
-    min_gpa_or_percentage: 75.0,
-    grant_amount_annual: 25000.0,
-    application_deadline: '2026-12-31',
-    portal_url: 'https://state-scholarships.nic.in',
-    required_documents: ['Income Certificate', 'Academic Transcript', 'Domicile Certificate'],
-    description: 'Direct benefit transfer tuition subsidy for state domicile candidates maintaining above 75% marks.',
-    active: true,
-  },
-];
-
 export function getLocalCustomSchemes(userId: string): ScholarshipScheme[] {
   try {
     const raw = localStorage.getItem(`civicagent_custom_schemes_${userId}`);
@@ -118,9 +55,9 @@ export async function fetchSchemes(userId?: string): Promise<ScholarshipScheme[]
       return merged;
     }
   } catch (e) {
-    console.warn('Backend scheme endpoint unreachable, using live catalog fallback', e);
+    console.warn('Backend scheme endpoint unreachable', e);
   }
-  return [...localCustom, ...OFFICIAL_FALLBACK_SCHEMES];
+  return [...localCustom];
 }
 
 export async function matchSchemes(profile: CitizenProfile, userId?: string): Promise<SchemeMatchResult[]> {
