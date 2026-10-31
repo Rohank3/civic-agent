@@ -9,14 +9,16 @@ export default defineConfig({
     tailwindcss(),
   ],
   build: {
+    modulePreload: {
+      resolveDependencies: (_filename, deps) => {
+        return deps.filter((dep) => !dep.includes('vendor-jspdf') && !dep.includes('receiptPdf') && !dep.includes('html2canvas'));
+      },
+    },
     rollupOptions: {
       output: {
         manualChunks(id) {
           if (id.includes('node_modules/jspdf')) {
             return 'vendor-jspdf';
-          }
-          if (id.includes('node_modules/html2canvas')) {
-            return 'vendor-html2canvas';
           }
           if (id.includes('node_modules/lucide-react')) {
             return 'vendor-lucide';
