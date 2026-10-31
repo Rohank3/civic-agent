@@ -4,8 +4,9 @@ import logging
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlsplit
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, BrowserContext, Page
 from playwright_stealth import Stealth
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ TRUSTED_IDENTITY_AND_CDNS = (
 )
 
 
-def origin(url):
+def origin(url: str) -> str:
     parsed = urlsplit(url)
     if parsed.scheme not in ("https", "http") or not parsed.netloc or parsed.username:
         raise ValueError("Invalid origin")
@@ -49,11 +50,16 @@ def is_allowed_host(host: str, base_host: str, explicit_allowed: set[str]) -> bo
 
 
 class SessionManager:
-    def __init__(self, redis, cipher, audit, ttl):
-        self.redis, self.cipher, self.audit, self.ttl = redis, cipher, audit, ttl
+    """Manages browser isolation contexts, storage states, and telemetry recordings."""
+
+    def __init__(self, redis: Any, cipher: Any, audit: Any, ttl: int):
+        self.redis = redis
+        self.cipher = cipher
+        self.audit = audit
+        self.ttl = ttl
 
     @asynccontextmanager
-    async def page(self, case, account, profile):
+    async def page(self, case: str, account: str, profile: dict[str, Any]):
         base_url = profile["url"]
         base = origin(base_url)
         base_host = urlsplit(base_url).hostname or ""
@@ -68,25 +74,40 @@ class SessionManager:
         cached = await self.redis.get(key)
         state = json.loads(self.cipher.open(cached, key)) if cached else {}
 
+        should_record_video = bool(profile.get("record_video", True))
+        should_trace = bool(profile.get("tracing", True))
+
         async with async_playwright() as pw, self._recording(case) as directory:
             endpoint = profile.get("cdp_endpoint")
             low_mem_args = [
                 "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
                 "--disable-gpu", "--no-zygote", "--renderer-process-limit=1",
-                "--js-flags=--max-old-space-size=128", "--mute-audio"
+                "--js-flags=--max-old-space-size=128", "--mute-audio",
+                "--disable-background-networking", "--disable-background-timer-throttling",
+                "--disable-backgrounding-occluded-windows", "--disable-breakpad",
+                "--disable-component-extensions-with-background-pages", "--disable-extensions",
+                "--disable-features=Translate,BackForwardCache", "--disable-ipc-flooding-protection",
+                "--disable-renderer-backgrounding"
             ]
-            browser = (await pw.chromium.connect_over_cdp(endpoint) if endpoint
-                       else await pw.chromium.launch(headless=True, args=low_mem_args))
+            browser = (
+                await pw.chromium.connect_over_cdp(endpoint) if endpoint
+                else await pw.chromium.launch(headless=True, args=low_mem_args)
+            )
             try:
-                ctx = await browser.new_context(
-                    viewport={"width": 1920, "height": 1080},
-                    proxy=proxy,
-                    storage_state=state.get("storage"),
-                    record_video_dir=directory,
-                    accept_downloads=True
-                )
+                ctx_kwargs: dict[str, Any] = {
+                    "viewport": {"width": 1920, "height": 1080},
+                    "proxy": proxy,
+                    "storage_state": state.get("storage"),
+                    "accept_downloads": True
+                }
+                if should_record_video and directory:
+                    ctx_kwargs["record_video_dir"] = directory
+
+                ctx: BrowserContext = await browser.new_context(**ctx_kwargs)
                 try:
-                    await ctx.tracing.start(screenshots=True, snapshots=True, sources=False)
+                    if should_trace:
+                        await ctx.tracing.start(screenshots=True, snapshots=True, sources=False)
+
                     await Stealth().apply_stealth_async(ctx)
                     profile_script = Path(__file__).resolve().parents[3] / "config/stealth_scripts/profile.js"
                     if profile_script.exists():
@@ -98,19 +119,26 @@ class SessionManager:
                     )
 
                     async def guard(route):
-                        req_url = route.request.url
-                        parsed = urlsplit(req_url)
-                        if parsed.scheme in ("https", "http") and parsed.hostname:
-                            if is_allowed_host(parsed.hostname, base_host, explicit_allowed):
+                        try:
+                            req_url = route.request.url
+                            parsed = urlsplit(req_url)
+                            if parsed.scheme in ("https", "http") and parsed.hostname:
+                                if is_allowed_host(parsed.hostname, base_host, explicit_allowed):
+                                    await route.continue_()
+                                    return
+                            elif req_url.startswith("data:") or req_url.startswith("blob:"):
                                 await route.continue_()
                                 return
-                        elif req_url.startswith("data:") or req_url.startswith("blob:"):
-                            await route.continue_()
-                            return
-                        await route.abort()
+                            await route.abort()
+                        except Exception as e:
+                            logger.debug(f"Guard route abort notice: {e}")
+                            try:
+                                await route.abort()
+                            except Exception:
+                                pass
 
                     await ctx.route("**/*", guard)
-                    page = await ctx.new_page()
+                    page: Page = await ctx.new_page()
 
                     # Handle file downloads (e.g., receipts, forms)
                     async def handle_download(download):
@@ -127,31 +155,38 @@ class SessionManager:
                     await page.goto(profile["url"])
                     yield page
 
-                    sessions = state.get("sessions", {})
+                    sessions_map = state.get("sessions", {})
                     curr_host = urlsplit(page.url).hostname or ""
                     if is_allowed_host(curr_host, base_host, explicit_allowed):
-                        sessions[origin(page.url)] = await page.evaluate("Object.fromEntries(Object.entries(sessionStorage))")
-                    raw = json.dumps({"sessions": sessions, "storage": await ctx.storage_state()}).encode()
+                        sessions_map[origin(page.url)] = await page.evaluate("Object.fromEntries(Object.entries(sessionStorage))")
+                    raw = json.dumps({"sessions": sessions_map, "storage": await ctx.storage_state()}).encode()
                     await self.redis.set(key, self.cipher.seal(raw, key),
                                          ex=min(self.ttl, profile.get("ttl", self.ttl)))
                 finally:
                     try:
-                        await ctx.tracing.stop(path=Path(directory) / "trace.zip")
+                        if should_trace and directory:
+                            await ctx.tracing.stop(path=Path(directory) / "trace.zip")
+                    except Exception as trace_err:
+                        logger.debug(f"Tracing stop notice: {trace_err}")
                     finally:
                         await ctx.close()
             finally:
                 await browser.close()
 
     @asynccontextmanager
-    async def _recording(self, case):
+    async def _recording(self, case: str):
         with tempfile.TemporaryDirectory() as directory:
             try:
                 yield directory
             finally:
-                for path in Path(directory).glob("*.webm"):
-                    digest = self.audit.put(case, "video.webm", path.read_bytes())
-                    await self.redis.rpush(f"videos:{case}", digest)
-                trace = Path(directory) / "trace.zip"
-                if trace.exists():
-                    digest = self.audit.put(case, "trace.zip", trace.read_bytes())
-                    await self.redis.rpush(f"traces:{case}", digest)
+                try:
+                    for path in Path(directory).glob("*.webm"):
+                        if path.exists() and path.stat().st_size > 0:
+                            digest = self.audit.put(case, "video.webm", path.read_bytes())
+                            await self.redis.rpush(f"videos:{case}", digest)
+                    trace = Path(directory) / "trace.zip"
+                    if trace.exists() and trace.stat().st_size > 0:
+                        digest = self.audit.put(case, "trace.zip", trace.read_bytes())
+                        await self.redis.rpush(f"traces:{case}", digest)
+                except Exception as e:
+                    logger.debug(f"Recording artifact persistence notice: {e}")

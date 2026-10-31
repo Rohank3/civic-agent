@@ -14,58 +14,118 @@ logger = logging.getLogger(__name__)
 class ObstacleSolver:
     """Automated and assisted solver for common bureaucracy portal obstacles."""
 
-    def __init__(self, redis=None, vision_client=None, model=None, api_key: str | None = None):
+    DISMISS_SELECTORS = [
+        "#accept-modal", "button:has-text('Accept All')", "button:has-text('Accept')", "button:has-text('I Agree')",
+        "button:has-text('Agree & Continue')", "button:has-text('Dismiss')", "button:has-text('Close')",
+        "[aria-label='Close']", ".modal-close", ".cookie-consent-accept",
+        "button:has-text('Continue to Application')", "button:has-text('Proceed')"
+    ]
+    COMBINED_DISMISS_SELECTOR = ", ".join(DISMISS_SELECTORS)
+
+    def __init__(
+        self,
+        redis: Any = None,
+        vision_client: Any = None,
+        model: str | None = None,
+        api_key: str | None = None,
+        http_client: httpx.AsyncClient | None = None
+    ):
         self.redis = redis
         self.vision_client = vision_client
         self.api_key = api_key or os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
         self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
+        self._http_client = http_client
+        self._owns_http_client = http_client is None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(8.0, connect=3.0),
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+            self._owns_http_client = True
+        return self._http_client
+
+    async def aclose(self) -> None:
+        """Close managed HTTP client resources."""
+        if self._owns_http_client and self._http_client and not self._http_client.is_closed:
+            await self._http_client.aclose()
 
     async def dismiss_overlays_and_modals(self, page: Page) -> bool:
-        """Dismiss cookie banners, announcement dialogs, and alert overlays."""
-        dismiss_selectors = [
-            "#accept-modal", "button:has-text('Accept All')", "button:has-text('Accept')", "button:has-text('I Agree')",
-            "button:has-text('Agree & Continue')", "button:has-text('Dismiss')", "button:has-text('Close')",
-            "[aria-label='Close']", ".modal-close", ".cookie-consent-accept",
-            "button:has-text('Continue to Application')", "button:has-text('Proceed')"
-        ]
-        for sel in dismiss_selectors:
-            try:
-                loc = page.locator(sel)
-                if await loc.count() > 0:
-                    first = loc.first
-                    if await first.is_visible(timeout=100):
-                        await first.click()
-                        await page.wait_for_timeout(100)
-                        return True
-            except Exception:
-                continue
+        """Dismiss cookie banners, announcement dialogs, and alert overlays using a single combined query."""
+        try:
+            loc = page.locator(self.COMBINED_DISMISS_SELECTOR)
+            cnt = await loc.count()
+            if cnt == 0:
+                return False
+            for i in range(cnt):
+                btn = loc.nth(i)
+                if await btn.is_visible():
+                    await btn.click()
+                    await page.wait_for_timeout(100)
+                    return True
+        except Exception as e:
+            logger.debug(f"Combined overlay dismissal check: {e}")
         return False
 
     async def handle_checkboxes_and_agreements(self, page: Page) -> int:
-        """Check required terms of service, declaration, or certification checkboxes."""
+        """Check required terms of service, declaration, or certification checkboxes in a single batch pass."""
         count = 0
         try:
-            checkboxes = await page.locator("input[type='checkbox']:not(:checked)").all()
-            for cb in checkboxes:
+            matched_selectors: list[str] = await page.evaluate("""() => {
+                const pattern = /agree|certif|declare|acknowledge|terms|truth|correct|under penalty/i;
+                const checkboxes = document.querySelectorAll("input[type='checkbox']:not(:checked)");
+                const matched = [];
+                let idx = 0;
+                for (const cb of checkboxes) {
+                    const style = window.getComputedStyle(cb);
+                    if (style.display === 'none' || style.visibility === 'hidden') {
+                        const parent = cb.closest('label') || cb.parentElement;
+                        if (parent) {
+                            const pstyle = window.getComputedStyle(parent);
+                            if (pstyle.display === 'none' || pstyle.visibility === 'hidden') continue;
+                        }
+                    }
+                    const label = (cb.labels && cb.labels[0] ? cb.labels[0].innerText : '') ||
+                                  (cb.closest('label') ? cb.closest('label').innerText : '') ||
+                                  cb.getAttribute('aria-label') || '';
+                    if (pattern.test(label)) {
+                        let sel = '';
+                        if (cb.id) {
+                            sel = `#${CSS.escape(cb.id)}`;
+                        } else if (cb.name) {
+                            sel = `input[name="${CSS.escape(cb.name)}"]`;
+                        } else {
+                            const ref = `_cb_ref_${idx++}`;
+                            cb.setAttribute('data-civic-cb', ref);
+                            sel = `[data-civic-cb="${ref}"]`;
+                        }
+                        matched.push(sel);
+                    }
+                }
+                return matched;
+            }""")
+            for sel in matched_selectors:
                 try:
-                    label = await cb.evaluate(
-                        "(el) => (el.labels && el.labels[0] ? el.labels[0].innerText : '') || el.getAttribute('aria-label') || ''"
-                    )
-                    # Certifications, terms, truth declarations
-                    if re.search(r"agree|certif|declare|acknowledge|terms|truth|correct|under penalty", label, re.I):
-                        await cb.check()
+                    loc = page.locator(sel).first
+                    if await loc.is_visible():
+                        await loc.check(timeout=500)
                         count += 1
                 except Exception:
-                    continue
-        except Exception:
-            pass
+                    try:
+                        await loc.click(timeout=500)
+                        count += 1
+                    except Exception:
+                        pass
+        except Exception as e:
+            logger.debug(f"Checkbox solver error: {e}")
         return count
 
     async def solve_text_or_math_captcha(self, page: Page, img_locator_selector: str, input_selector: str) -> bool:
         """Solve visual/text CAPTCHAs using Google Gemini multimodal vision with fallback."""
         try:
             img_elem = page.locator(img_locator_selector).first
-            if not await img_elem.is_visible(timeout=1000):
+            if not await img_elem.is_visible(timeout=300):
                 return False
             screenshot_bytes = await img_elem.screenshot()
             b64_img = base64.b64encode(screenshot_bytes).decode("ascii")
@@ -85,15 +145,15 @@ class ObstacleSolver:
                     }],
                     "generationConfig": {"temperature": 0.0}
                 }
-                async with httpx.AsyncClient(timeout=8.0) as client:
-                    resp = await client.post(url, json=payload)
-                    if resp.status_code == 200:
-                        solution = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        clean_solution = re.sub(r"[^A-Za-z0-9]", "", solution)
-                        if clean_solution:
-                            await page.locator(input_selector).fill(clean_solution)
-                            logger.info(f"Solved CAPTCHA via Gemini Vision: {clean_solution}")
-                            return True
+                client = await self._get_client()
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    solution = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    clean_solution = re.sub(r"[^A-Za-z0-9]", "", solution)
+                    if clean_solution:
+                        await page.locator(input_selector).fill(clean_solution)
+                        logger.info(f"Solved CAPTCHA via Gemini Vision: {clean_solution}")
+                        return True
 
             if self.vision_client and hasattr(self.vision_client, "chat"):
                 response = await self.vision_client.chat.completions.create(
@@ -128,10 +188,12 @@ class ObstacleSolver:
         """Poll Redis for incoming SMS/Email OTP listener, or return None on timeout for human escalation."""
         if not self.redis:
             return None
+        interval = 2.0
+        effective_timeout = float(timeout_seconds)
+
         key = f"otp:{case_id}"
-        elapsed = 0
-        interval = 2
-        while elapsed < timeout_seconds:
+        elapsed = 0.0
+        while elapsed < effective_timeout:
             code = await self.redis.get(key)
             if code:
                 if isinstance(code, bytes):

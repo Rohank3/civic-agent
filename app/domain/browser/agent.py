@@ -46,6 +46,42 @@ FIELD_SYNONYMS = {
 class AutonomousBureaucracyAgent:
     """Autonomous agent navigating legacy public service web portals."""
 
+    NEXT_BUTTON_SELECTORS = [
+        "#btnNext", "#btnReview", "button:has-text('Save & Continue')",
+        "button:has-text('Next Step')", "button:has-text('Next')", "button:has-text('Continue')",
+        "input[type='button'][value*='Next']", "input[type='button'][value*='Continue']",
+        "input[type='submit'][value*='Next']", "input[type='submit'][value*='Continue']",
+        "button:has-text('Proceed')", "a:has-text('Next Step')", ".wizard-next"
+    ]
+    COMBINED_NEXT_SELECTOR = ", ".join(NEXT_BUTTON_SELECTORS)
+
+    SUBMIT_SELECTORS = [
+        "button:has-text('Submit Application')", "button:has-text('Submit')",
+        "input[type='submit'][value*='Submit']", "#submit-application",
+        "#submit", ".btn-submit", "button:has-text('Confirm and Submit')"
+    ]
+    COMBINED_SUBMIT_SELECTOR = ", ".join(SUBMIT_SELECTORS)
+
+    ERROR_SELECTORS = [
+        ".error", ".invalid-feedback", ".alert-danger", "[aria-invalid='true']",
+        ".validation-error", ".field-validation-error", ".text-danger", "span.error-msg",
+        "div.error-text", ".error-message"
+    ]
+    COMBINED_ERROR_SELECTOR = ", ".join(ERROR_SELECTORS)
+
+    SPECIFIC_TRACKING_SELECTORS = [
+        "#tracking-number", "#receipt", ".confirmation-number",
+        ".receipt-id", "#application-id", ".tracking-id",
+        "[data-testid='confirmation-number']"
+    ]
+    COMBINED_SPECIFIC_TRACKING = ", ".join(SPECIFIC_TRACKING_SELECTORS)
+
+    BROAD_TRACKING_SELECTORS = [
+        "span:has-text('Confirmation:')", "span:has-text('Tracking Number:')",
+        "div:has-text('Tracking Number:')", "div:has-text('Confirmation:')"
+    ]
+    COMBINED_BROAD_TRACKING = ", ".join(BROAD_TRACKING_SELECTORS)
+
     def __init__(
         self,
         page: Page,
@@ -55,7 +91,8 @@ class AutonomousBureaucracyAgent:
         telemetry_emitter: Any = None,
         case_id: str | None = None,
         pacing_mode: str = "1x",
-        vision: VisionLocator | None = None
+        vision: VisionLocator | None = None,
+        http_client: httpx.AsyncClient | None = None
     ):
         self.page = page
         self.request = service_request
@@ -69,6 +106,43 @@ class AutonomousBureaucracyAgent:
         self.current_step = 1
         self.current_actor = "AUTONOMOUS_AGENT"
         self.total_fields_filled = 0
+        self._http_client = http_client
+        self._owns_http_client = http_client is None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(8.0, connect=3.0),
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+            self._owns_http_client = True
+        return self._http_client
+
+    async def aclose(self) -> None:
+        """Release underlying HTTP client resources."""
+        if self._owns_http_client and self._http_client and not self._http_client.is_closed:
+            await self._http_client.aclose()
+        if self.vision and hasattr(self.vision, "aclose"):
+            await self.vision.aclose()
+        if self.solver and hasattr(self.solver, "aclose"):
+            await self.solver.aclose()
+
+    def _is_fast_mode(self) -> bool:
+        """Determine if fast pacing mode was explicitly requested via pacing_mode or telemetry bus."""
+        mode = str(self.pacing_mode).lower().strip()
+        if mode in ("fast", "instant", "0x", "5x", "10x", "fastest", "none"):
+            return True
+        try:
+            from app.core.telemetry import telemetry_bus
+            bus_pacing = telemetry_bus.get_pacing(self.case_id).lower().strip()
+            if bus_pacing in ("fast", "instant", "0x", "5x", "10x", "fastest", "none"):
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _is_fast_or_testing(self) -> bool:
+        return self._is_fast_mode()
 
     async def emit_telemetry(
         self,
@@ -118,14 +192,14 @@ class AutonomousBureaucracyAgent:
             pass
 
     async def _type_humanlike(self, ctrl, text: str):
-        """Type with realistic human micro-cadence (40-85ms jitter) for anti-bot evasion."""
+        """Type with realistic human micro-cadence (40-85ms jitter) for anti-bot evasion, or fill instantly in fast mode."""
+        if self._is_fast_mode():
+            await ctrl.fill(text)
+            return
+
         await self._check_pause()
         try:
-            if os.environ.get("TESTING") == "1" or os.environ.get("PYTEST_CURRENT_TEST"):
-                await ctrl.fill(text)
-                return
             from app.core.telemetry import telemetry_bus
-            # Check fast-forward chapter cut
             if telemetry_bus.check_and_clear_skip(self.case_id):
                 await ctrl.fill(text)
                 return
@@ -136,7 +210,6 @@ class AutonomousBureaucracyAgent:
             await ctrl.scroll_into_view_if_needed(timeout=500)
             await ctrl.click(timeout=500)
             await ctrl.clear()
-            # If string is long (e.g. address), speed up slightly to avoid drag
             jitter_min = 0.020 if len(text) > 20 else 0.035
             jitter_max = 0.055 if len(text) > 20 else 0.075
             for ch in text:
@@ -159,15 +232,17 @@ class AutonomousBureaucracyAgent:
         combined = ", ".join(selectors)
         try:
             el = self.page.locator(combined).first
-            if await el.is_visible(timeout=100):
+            if await el.is_visible():
                 return True
         except Exception:
             pass
         return False
 
     async def _pacing_delay(self):
+        """Perform anti-bot reading delay unless running in explicit fast pacing mode."""
+        if self._is_fast_mode():
+            return
         await self._check_pause()
-        # Natural human reading and step delay
         await asyncio.sleep(random.uniform(0.35, 0.65))
 
     def _extract_name_parts(self, full_name: str) -> tuple[str, str]:
@@ -228,7 +303,7 @@ class AutonomousBureaucracyAgent:
         """Detect and authenticate on portals requiring existing user credentials."""
         password_input = self.page.locator("input[type='password']").first
         try:
-            if not await password_input.is_visible(timeout=300):
+            if not await password_input.is_visible(timeout=200):
                 return False
         except Exception:
             return False
@@ -244,14 +319,12 @@ class AutonomousBureaucracyAgent:
             "input[type='text']:visible", "input[name*='user']", "input[name*='email']",
             "input[name*='roll']", "input[name*='login']", "input[id*='user']"
         ]
-        for sel in username_selectors:
-            try:
-                u_input = self.page.locator(sel).first
-                if await u_input.is_visible(timeout=200):
-                    await u_input.fill(username)
-                    break
-            except Exception:
-                continue
+        u_loc = self.page.locator(", ".join(username_selectors)).first
+        try:
+            if await u_loc.is_visible(timeout=200):
+                await u_loc.fill(username)
+        except Exception:
+            pass
 
         await password_input.fill(password)
         await self._pacing_delay()
@@ -261,98 +334,94 @@ class AutonomousBureaucracyAgent:
             "input[type='submit'][value*='Login']", "input[type='submit'][value*='Sign In']",
             "#btnLogin", "#login-submit"
         ]
-        for sel in login_btn_selectors:
-            try:
-                btn = self.page.locator(sel).first
-                if await btn.is_visible(timeout=500):
-                    await btn.click()
-                    try:
-                        await self.page.wait_for_load_state("domcontentloaded", timeout=2000)
-                    except PlaywrightTimeout:
-                        pass
-                    await self.emit_telemetry(
-                        action="LOGIN_COMPLETED",
-                        details="Successfully authenticated. Advancing to scholarship application wizard.",
-                        stage="NAVIGATING"
-                    )
-                    return True
-            except Exception:
-                continue
+        btn = self.page.locator(", ".join(login_btn_selectors)).first
+        try:
+            if await btn.is_visible(timeout=300):
+                await btn.click()
+                try:
+                    await self.page.wait_for_load_state("domcontentloaded", timeout=2000)
+                except PlaywrightTimeout:
+                    pass
+                await self.emit_telemetry(
+                    action="LOGIN_COMPLETED",
+                    details="Successfully authenticated. Advancing to scholarship application wizard.",
+                    stage="NAVIGATING"
+                )
+                return True
+        except Exception:
+            pass
         return False
 
     async def scan_and_populate_current_page(self) -> int:
-        """Dynamically detect and fill all interactive inputs on the current page."""
+        """Dynamically detect and fill all visible interactive inputs on the current page in a single batch pass."""
         await self.solver.dismiss_overlays_and_modals(self.page)
         await self.solver.handle_checkboxes_and_agreements(self.page)
 
         filled_count = 0
-        newly_learned = {}
-        handled_selectors = set()
-        handled_keys = set()
+        newly_learned: dict[str, str] = {}
+        handled_selectors: set[str] = set()
+        handled_keys: set[str] = set()
 
         # Gemini 3.5 Flash ReAct Reasoning pass on live execution
-        if os.environ.get("TESTING") != "1" and not os.environ.get("PYTEST_CURRENT_TEST"):
-            try:
-                planned_actions = await self.plan_page_actions_with_gemini()
-                if planned_actions:
-                    await self.emit_telemetry(
-                        action="GEMINI_REACT_REASONING",
-                        details=f"Gemini 3.5 Flash ReAct reasoning: Formulated {len(planned_actions)} action steps for Step {self.current_step}",
-                        stage="REASONING"
-                    )
-                    # Directly execute Gemini's planned actions
-                    for act in planned_actions:
-                        sel = act.get("selector")
-                        val = act.get("value")
-                        atype = act.get("action", "fill")
-                        if not sel:
-                            continue
-                        try:
-                            loc = self.page.locator(sel).first
-                            if await loc.is_visible(timeout=300):
-                                if atype == "fill" and val:
-                                    current_val = await loc.input_value()
-                                    if current_val != str(val):
-                                        await self._type_humanlike(loc, str(val))
-                                        filled_count += 1
-                                    handled_selectors.add(sel.lower())
-                                    matched_k = self._match_field_key(sel)
-                                    if matched_k:
-                                        handled_keys.add(matched_k)
-                                elif atype == "select" and val:
+        try:
+            planned_actions = await self.plan_page_actions_with_gemini()
+            if planned_actions:
+                await self.emit_telemetry(
+                    action="GEMINI_REACT_REASONING",
+                    details=f"Gemini 3.5 Flash ReAct reasoning: Formulated {len(planned_actions)} action steps for Step {self.current_step}",
+                    stage="REASONING"
+                )
+                for act in planned_actions:
+                    sel = act.get("selector")
+                    val = act.get("value")
+                    atype = act.get("action", "fill")
+                    if not sel:
+                        continue
+                    try:
+                        loc = self.page.locator(sel).first
+                        if await loc.is_visible():
+                            if atype == "fill" and val:
+                                current_val = await loc.input_value()
+                                if current_val != str(val):
+                                    await self._type_humanlike(loc, str(val))
+                                    filled_count += 1
+                                handled_selectors.add(sel.lower())
+                                matched_k = self._match_field_key(sel)
+                                if matched_k:
+                                    handled_keys.add(matched_k)
+                            elif atype == "select" and val:
+                                try:
+                                    await loc.select_option(label=str(val), timeout=400)
+                                    filled_count += 1
+                                except Exception:
                                     try:
-                                        await loc.select_option(label=str(val), timeout=400)
+                                        await loc.select_option(value=str(val), timeout=400)
                                         filled_count += 1
                                     except Exception:
-                                        try:
-                                            await loc.select_option(value=str(val), timeout=400)
-                                            filled_count += 1
-                                        except Exception:
-                                            pass
-                                    handled_selectors.add(sel.lower())
-                                    matched_k = self._match_field_key(sel)
-                                    if matched_k:
-                                        handled_keys.add(matched_k)
-                                elif atype in ("check", "click", "checkbox"):
-                                    try:
-                                        if await loc.is_checked() is False:
-                                            await loc.check(timeout=400)
-                                            filled_count += 1
-                                    except Exception:
-                                        await loc.click(timeout=400)
+                                        pass
+                                handled_selectors.add(sel.lower())
+                                matched_k = self._match_field_key(sel)
+                                if matched_k:
+                                    handled_keys.add(matched_k)
+                            elif atype in ("check", "checkbox"):
+                                try:
+                                    if await loc.is_checked() is False:
+                                        await loc.check(timeout=400)
                                         filled_count += 1
-                                    handled_selectors.add(sel.lower())
-                        except Exception as act_err:
-                            logger.debug(f"Gemini action execution notice on {sel}: {act_err}")
+                                except Exception:
+                                    pass
+                                handled_selectors.add(sel.lower())
+                    except Exception as act_err:
+                        logger.debug(f"Gemini action execution notice on {sel}: {act_err}")
 
-                    if handled_selectors:
-                        await self.emit_telemetry(
-                            action="GEMINI_REACT_DOM_SATISFIED",
-                            details=f"Step {self.current_step}: Gemini ReAct planner populated {len(handled_selectors)} fields with zero heuristic collisions.",
-                            stage="POPULATING_FORM"
-                        )
-            except Exception as e:
-                logger.debug(f"Gemini ReAct execution pass notice: {e}")
+                if handled_selectors:
+                    await self.emit_telemetry(
+                        action="GEMINI_REACT_DOM_SATISFIED",
+                        details=f"Step {self.current_step}: Gemini ReAct planner populated {len(handled_selectors)} fields with zero heuristic collisions.",
+                        stage="POPULATING_FORM"
+                    )
+        except Exception as e:
+            logger.debug(f"Gemini ReAct execution pass notice: {e}")
 
         # 1. Fast-path: Check learned memory cache
         if self.memory:
@@ -362,39 +431,89 @@ class AutonomousBureaucracyAgent:
                     continue
                 try:
                     loc = self.page.locator(selector).first
-                    if await loc.is_visible(timeout=100):
+                    if await loc.is_visible():
                         val = self._get_field_value(field_key)
                         if val:
                             current = await loc.input_value()
                             if current != val:
                                 await loc.fill(val)
                                 filled_count += 1
+                                handled_selectors.add(selector.lower())
+                                handled_keys.add(field_key)
                 except Exception:
                     continue
 
-        controls = await self.page.locator("input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, select").all()
+        # 2. Batch DOM extraction: inspect ALL visible inputs in ONE roundtrip (no sequential CDP loops)
+        visible_inputs: list[dict[str, str]] = await self.page.evaluate("""() => {
+            const candidates = document.querySelectorAll(
+                "input:not([type=hidden]):not([type=submit]):not([type=button]):not([type=reset]), textarea, select"
+            );
+            const results = [];
+            let refIdx = 0;
+            for (const el of candidates) {
+                // Filter out elements within hidden steps or display:none containers
+                if (el.offsetParent === null && el.tagName.toLowerCase() !== 'body') {
+                    continue;
+                }
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                    continue;
+                }
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 && rect.height === 0) {
+                    continue;
+                }
 
-        for ctrl in controls:
+                // Extract human-readable label
+                let label = '';
+                if (el.labels && el.labels.length > 0) {
+                    for (const l of el.labels) {
+                        if (l.innerText && l.innerText.trim()) {
+                            label = l.innerText.trim();
+                            break;
+                        }
+                    }
+                }
+                if (!label) {
+                    const parentLabel = el.closest('label');
+                    if (parentLabel && parentLabel.innerText) {
+                        label = parentLabel.innerText.trim();
+                    }
+                }
+                if (!label) {
+                    label = el.getAttribute('aria-label') ||
+                            el.getAttribute('placeholder') ||
+                            el.getAttribute('name') ||
+                            el.getAttribute('id') || '';
+                }
+
+                // Compute exact CSS selector
+                let selector = '';
+                if (el.id) {
+                    selector = `#${CSS.escape(el.id)}`;
+                } else if (el.name) {
+                    selector = `${el.tagName.toLowerCase()}[name="${CSS.escape(el.name)}"]`;
+                } else {
+                    const refId = `civic_ctrl_${refIdx++}`;
+                    el.setAttribute('data-civic-ref', refId);
+                    selector = `[data-civic-ref="${refId}"]`;
+                }
+
+                results.push({
+                    tag: el.tagName.toLowerCase(),
+                    type: (el.type || 'text').toLowerCase(),
+                    value: el.value || '',
+                    id: el.id || '',
+                    name: el.name || '',
+                    label: (label || '').trim(),
+                    selector: selector
+                });
+            }
+            return results;
+        }""")
+
+        for info in visible_inputs:
             try:
-                if not await ctrl.is_visible(timeout=200):
-                    continue
-
-                info = await ctrl.evaluate("""(el) => {
-                    const label = (el.labels && el.labels[0] ? el.labels[0].innerText : '') ||
-                                  el.getAttribute('aria-label') ||
-                                  el.getAttribute('placeholder') ||
-                                  el.getAttribute('name') ||
-                                  el.getAttribute('id') || '';
-                    return {
-                        tag: el.tagName.toLowerCase(),
-                        type: (el.type || 'text').toLowerCase(),
-                        value: el.value || '',
-                        id: el.id || '',
-                        name: el.name || '',
-                        label: label.trim()
-                    };
-                }""")
-
                 ctrl_id = f"#{info['id']}".lower() if info["id"] else ""
                 ctrl_name = f"[name='{info['name']}']".lower() if info["name"] else ""
                 if (ctrl_id and ctrl_id in handled_selectors) or (ctrl_name and ctrl_name in handled_selectors):
@@ -404,7 +523,7 @@ class AutonomousBureaucracyAgent:
                 ctype = info["type"]
                 label = info["label"]
 
-                if ctype in ("checkbox", "radio"):
+                if ctype in ("checkbox", "radio", "file"):
                     continue
 
                 matched_key = self._match_field_key(label)
@@ -421,15 +540,17 @@ class AutonomousBureaucracyAgent:
                 if not target_value:
                     continue
 
+                ctrl = self.page.locator(info["selector"]).first
                 if tag == "select":
-                    # Try selecting by label or value
                     try:
                         await ctrl.select_option(label=target_value, timeout=500)
                         filled_count += 1
+                        handled_keys.add(matched_key)
                     except Exception:
                         try:
                             await ctrl.select_option(value=target_value, timeout=500)
                             filled_count += 1
+                            handled_keys.add(matched_key)
                         except Exception:
                             pass
                 else:
@@ -437,6 +558,7 @@ class AutonomousBureaucracyAgent:
                     if current_val != target_value:
                         await self._type_humanlike(ctrl, target_value)
                         filled_count += 1
+                        handled_keys.add(matched_key)
             except Exception as e:
                 logger.debug(f"Skipping control: {e}")
                 continue
@@ -462,16 +584,17 @@ class AutonomousBureaucracyAgent:
         if not self.request.documents:
             return
 
-        file_inputs = await self.page.locator("input[type='file']").all()
-        if not file_inputs:
+        file_inputs = self.page.locator("input[type='file']")
+        cnt = await file_inputs.count()
+        if cnt == 0:
             return
 
-        for finput in file_inputs:
+        for i in range(cnt):
+            finput = file_inputs.nth(i)
             try:
-                if not await finput.is_visible(timeout=200):
+                if not await finput.is_visible():
                     continue
                 for doc in self.request.documents:
-                    # Create temporary file to pass to Playwright set_input_files
                     suffix = ".pdf" if doc.kind == "pdf" else (".png" if doc.kind == "image" else ".txt")
                     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
                         tmp_path = Path(tmp.name)
@@ -498,27 +621,21 @@ class AutonomousBureaucracyAgent:
                 logger.warning(f"File upload error: {e}")
 
     async def advance_wizard_step(self) -> bool:
-        """Find and click next/continue buttons in multi-step application wizards."""
-        next_button_selectors = [
-            "#btnNext", "#btnReview", "button:has-text('Save & Continue')",
-            "button:has-text('Next Step')", "button:has-text('Next')", "button:has-text('Continue')",
-            "input[type='button'][value*='Next']", "input[type='button'][value*='Continue']",
-            "input[type='submit'][value*='Next']", "input[type='submit'][value*='Continue']",
-            "button:has-text('Proceed')", "a:has-text('Next Step')", ".wizard-next"
-        ]
-        for sel in next_button_selectors:
+        """Find and click next/continue buttons in multi-step application wizards in priority order."""
+        for sel in self.NEXT_BUTTON_SELECTORS:
             try:
                 loc = self.page.locator(sel)
                 cnt = await loc.count()
                 for i in range(cnt):
                     btn = loc.nth(i)
-                    if await btn.is_visible(timeout=50):
+                    if await btn.is_visible():
                         await btn.click()
                         try:
                             await self.page.wait_for_load_state("domcontentloaded", timeout=1000)
                         except PlaywrightTimeout:
                             pass
-                        await self.page.wait_for_timeout(100)
+                        if not self._is_fast_mode():
+                            await self.page.wait_for_timeout(100)
                         self.current_step += 1
                         await self._pacing_delay()
                         await self.emit_telemetry(
@@ -533,11 +650,10 @@ class AutonomousBureaucracyAgent:
         # If step failed to advance, inspect DOM for validation alerts and trigger autonomous self-correction
         corrected = await self.diagnose_and_self_correct_errors()
         if corrected:
-            # Retry advancing step after self-correction
-            for sel in next_button_selectors[:4]:
+            for sel in self.NEXT_BUTTON_SELECTORS[:4]:
                 try:
                     btn = self.page.locator(sel).first
-                    if await btn.is_visible(timeout=50):
+                    if await btn.is_visible():
                         await btn.click()
                         self.current_step += 1
                         await self.emit_telemetry(
@@ -568,25 +684,19 @@ class AutonomousBureaucracyAgent:
         return False
 
     async def scan_for_validation_errors(self) -> list[dict[str, str]]:
-        """Detect visible form validation errors, invalid-feedback alerts, or rejected fields."""
-        error_selectors = [
-            ".error", ".invalid-feedback", ".alert-danger", "[aria-invalid='true']",
-            ".validation-error", ".field-validation-error", ".text-danger", "span.error-msg",
-            "div.error-text", ".error-message"
-        ]
+        """Detect visible form validation errors using a combined query."""
         errors = []
-        for sel in error_selectors:
-            try:
-                loc = self.page.locator(sel)
-                count = await loc.count()
-                for i in range(count):
-                    el = loc.nth(i)
-                    if await el.is_visible(timeout=50):
-                        text = (await el.inner_text()).strip()
-                        if text:
-                            errors.append({"selector": sel, "message": text})
-            except Exception:
-                continue
+        try:
+            loc = self.page.locator(self.COMBINED_ERROR_SELECTOR)
+            count = await loc.count()
+            for i in range(count):
+                el = loc.nth(i)
+                if await el.is_visible():
+                    text = (await el.inner_text()).strip()
+                    if text:
+                        errors.append({"selector": self.COMBINED_ERROR_SELECTOR, "message": text})
+        except Exception:
+            pass
         return errors
 
     async def diagnose_and_self_correct_errors(self) -> bool:
@@ -642,92 +752,89 @@ class AutonomousBureaucracyAgent:
                 "'corrected_value' (string or boolean), "
                 "'reasoning' (one sentence explanation)."
             )
-            async with httpx.AsyncClient(timeout=6.0) as client:
-                resp = await client.post(url, json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"responseMimeType": "application/json"}
-                })
-                if resp.status_code == 200:
-                    data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
-                    field = data.get("target_field", "").lower()
-                    action_type = data.get("action_type", "fill")
-                    selector = data.get("selector")
-                    corrected_val = str(data.get("corrected_value", ""))
-                    reasoning = data.get("reasoning", "Self-corrected input format")
+            client = await self._get_client()
+            resp = await client.post(url, json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"responseMimeType": "application/json"}
+            })
+            if resp.status_code == 200:
+                data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
+                field = data.get("target_field", "").lower()
+                action_type = data.get("action_type", "fill")
+                selector = data.get("selector")
+                corrected_val = str(data.get("corrected_value", ""))
+                reasoning = data.get("reasoning", "Self-corrected input format")
 
-                    applied = False
+                applied = False
 
-                    # 1. If Gemini returned a direct selector, try it first
-                    if selector:
-                        try:
-                            loc = self.page.locator(selector).first
-                            if await loc.is_visible(timeout=200):
-                                if action_type == "fill":
-                                    await self._type_humanlike(loc, corrected_val)
+                # 1. If Gemini returned a direct selector, try it first
+                if selector:
+                    try:
+                        loc = self.page.locator(selector).first
+                        if await loc.is_visible():
+                            if action_type == "fill":
+                                await self._type_humanlike(loc, corrected_val)
+                                applied = True
+                            elif action_type == "select":
+                                try:
+                                    await loc.select_option(label=corrected_val, timeout=200)
                                     applied = True
-                                elif action_type == "select":
-                                    try:
-                                        await loc.select_option(label=corrected_val, timeout=200)
-                                        applied = True
-                                    except Exception:
-                                        await loc.select_option(value=corrected_val, timeout=200)
-                                        applied = True
-                                elif action_type == "check":
-                                    await loc.check(timeout=200)
+                                except Exception:
+                                    await loc.select_option(value=corrected_val, timeout=200)
                                     applied = True
-                        except Exception:
-                            pass
+                            elif action_type == "check":
+                                await loc.check(timeout=200)
+                                applied = True
+                    except Exception:
+                        pass
 
-                    # 2. Universal synonym-driven element resolution (inputs, selects, textareas, checkboxes)
-                    if not applied:
-                        for key, synonyms in FIELD_SYNONYMS.items():
-                            if field in key or any(s in field for s in synonyms):
-                                for syn in synonyms:
-                                    # Text input
-                                    loc_input = self.page.locator(f"input[name*='{syn}' i], input[id*='{syn}' i]").first
-                                    try:
-                                        if await loc_input.is_visible(timeout=100):
-                                            if action_type == "check":
-                                                await loc_input.check(timeout=100)
-                                            else:
-                                                await self._type_humanlike(loc_input, corrected_val)
-                                            applied = True
-                                            break
-                                    except Exception:
-                                        pass
+                # 2. Universal synonym-driven element resolution (inputs, selects, textareas, checkboxes)
+                if not applied:
+                    for key, synonyms in FIELD_SYNONYMS.items():
+                        if field in key or any(s in field for s in synonyms):
+                            for syn in synonyms:
+                                loc_input = self.page.locator(f"input[name*='{syn}' i], input[id*='{syn}' i]").first
+                                try:
+                                    if await loc_input.is_visible():
+                                        if action_type == "check":
+                                            await loc_input.check(timeout=100)
+                                        else:
+                                            await self._type_humanlike(loc_input, corrected_val)
+                                        applied = True
+                                        break
+                                except Exception:
+                                    pass
 
-                                    # Select dropdown
-                                    loc_select = self.page.locator(f"select[name*='{syn}' i], select[id*='{syn}' i]").first
-                                    try:
-                                        if await loc_select.is_visible(timeout=100):
-                                            try:
-                                                await loc_select.select_option(label=corrected_val, timeout=100)
-                                            except Exception:
-                                                await loc_select.select_option(value=corrected_val, timeout=100)
-                                            applied = True
-                                            break
-                                    except Exception:
-                                        pass
+                                loc_select = self.page.locator(f"select[name*='{syn}' i], select[id*='{syn}' i]").first
+                                try:
+                                    if await loc_select.is_visible():
+                                        try:
+                                            await loc_select.select_option(label=corrected_val, timeout=100)
+                                        except Exception:
+                                            await loc_select.select_option(value=corrected_val, timeout=100)
+                                        applied = True
+                                        break
+                                except Exception:
+                                    pass
 
-                                    # Textarea
-                                    loc_ta = self.page.locator(f"textarea[name*='{syn}' i], textarea[id*='{syn}' i]").first
-                                    try:
-                                        if await loc_ta.is_visible(timeout=100):
-                                            await self._type_humanlike(loc_ta, corrected_val)
-                                            applied = True
-                                            break
-                                    except Exception:
-                                        pass
+                                loc_ta = self.page.locator(f"textarea[name*='{syn}' i], textarea[id*='{syn}' i]").first
+                                try:
+                                    if await loc_ta.is_visible():
+                                        await self._type_humanlike(loc_ta, corrected_val)
+                                        applied = True
+                                        break
+                                except Exception:
+                                    pass
 
-                                if applied:
-                                    break
+                            if applied:
+                                break
 
-                    await self.emit_telemetry(
-                        action="AUTONOMOUS_SELF_CORRECTION",
-                        details=f"Self-corrected field '{field}' to '{corrected_val}': {reasoning}",
-                        stage="POPULATING_FORM"
-                    )
-                    return True
+                await self.emit_telemetry(
+                    action="AUTONOMOUS_SELF_CORRECTION",
+                    details=f"Self-corrected field '{field}' to '{corrected_val}': {reasoning}",
+                    stage="POPULATING_FORM"
+                )
+                return True
         except Exception as e:
             logger.debug(f"Self-correction reasoning notice: {e}")
         return False
@@ -806,37 +913,33 @@ class AutonomousBureaucracyAgent:
                 "generationConfig": {"responseMimeType": "application/json"}
             }
 
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    raw_data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
-                    actions = raw_data.get("actions", [])
-                    if actions:
-                        await self.emit_telemetry(
-                            action="GEMINI_REACT_PLAN_FORMULATED",
-                            details=f"Gemini Flash planned {len(actions)} actions for Step {self.current_step}: {', '.join(a.get('reason', '') for a in actions[:3])}",
-                            stage="REASONING"
-                        )
-                    return actions
+            client = await self._get_client()
+            resp = await client.post(url, json=payload)
+            if resp.status_code == 200:
+                raw_data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
+                actions = raw_data.get("actions", [])
+                if actions:
+                    await self.emit_telemetry(
+                        action="GEMINI_REACT_PLAN_FORMULATED",
+                        details=f"Gemini Flash planned {len(actions)} actions for Step {self.current_step}: {', '.join(a.get('reason', '') for a in actions[:3])}",
+                        stage="REASONING"
+                    )
+                return actions
         except Exception as e:
             logger.debug(f"Gemini ReAct planner notice: {e}")
         return []
 
     async def is_review_or_submission_page(self) -> bool:
         """Detect whether the agent has reached the final review or submission confirmation step."""
-        submit_selectors = [
-            "#submit-application", "button:has-text('Submit Application')", "button:has-text('Submit')",
-            "input[type='submit'][value*='Submit']", "#submit", ".btn-submit", "button:has-text('Confirm and Submit')"
-        ]
-        for sel in submit_selectors:
-            try:
-                loc = self.page.locator(sel)
-                if await loc.count() > 0:
-                    btn = loc.first
-                    if await btn.is_visible(timeout=50):
-                        return True
-            except Exception:
-                continue
+        try:
+            loc = self.page.locator(self.COMBINED_SUBMIT_SELECTOR)
+            cnt = await loc.count()
+            for i in range(cnt):
+                btn = loc.nth(i)
+                if await btn.is_visible():
+                    return True
+        except Exception:
+            pass
         return False
 
     async def self_reflect_and_verify(self) -> dict[str, Any]:
@@ -862,7 +965,7 @@ class AutonomousBureaucracyAgent:
         audit_score = 0.98
 
         # If Gemini API key is configured, perform live multimodal vision + semantic audit
-        if api_key and (os.environ.get("TESTING") != "1" and not os.environ.get("PYTEST_CURRENT_TEST")):
+        if api_key:
             try:
                 screenshot_bytes = await self.page.screenshot(type="jpeg", quality=60)
                 b64_image = base64.b64encode(screenshot_bytes).decode("ascii")
@@ -884,13 +987,13 @@ class AutonomousBureaucracyAgent:
                     }],
                     "generationConfig": {"responseMimeType": "application/json"}
                 }
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.post(url, json=payload)
-                    if resp.status_code == 200:
-                        raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                        data = json.loads(raw)
-                        audit_findings = data.get("findings", audit_findings)
-                        audit_score = float(data.get("match_score", 0.98))
+                client = await self._get_client()
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    data = json.loads(raw)
+                    audit_findings = data.get("findings", audit_findings)
+                    audit_score = float(data.get("match_score", 0.98))
             except Exception as e:
                 logger.debug(f"Gemini live self-reflection fallback: {e}")
 
@@ -918,50 +1021,54 @@ class AutonomousBureaucracyAgent:
         return snapshot
 
     async def submit_application(self) -> None:
-        """Click the final submission action."""
-        submit_selectors = [
-            "button:has-text('Submit Application')", "button:has-text('Submit')",
-            "input[type='submit'][value*='Submit']", "#submit-application",
-            "#submit", ".btn-submit", "button:has-text('Confirm and Submit')"
-        ]
-        for sel in submit_selectors:
+        """Click the final submission action using prioritized submit selectors."""
+        for sel in self.SUBMIT_SELECTORS:
             try:
-                btn = self.page.locator(sel).first
-                if await btn.is_visible(timeout=1000):
-                    await btn.click()
-                    try:
-                        await self.page.wait_for_load_state("domcontentloaded", timeout=2000)
-                    except PlaywrightTimeout:
-                        pass
-                    await self.page.wait_for_timeout(500)
-                    return
+                loc = self.page.locator(sel)
+                cnt = await loc.count()
+                for i in range(cnt):
+                    btn = loc.nth(i)
+                    if await btn.is_visible():
+                        await btn.click()
+                        try:
+                            await self.page.wait_for_load_state("domcontentloaded", timeout=2000)
+                        except PlaywrightTimeout:
+                            pass
+                        if not self._is_fast_mode():
+                            await self.page.wait_for_timeout(200)
+                        return
             except Exception:
                 continue
         raise RuntimeError("Submit button not found on final portal page")
 
     async def extract_tracking_receipt(self, case_id: str) -> dict[str, Any]:
         """Extract tracking/confirmation reference, full-page screenshot, and receipt details."""
-        # 1. Search for tracking/receipt numbers
         receipt_text = ""
-        tracking_selectors = [
-            "#receipt", "#tracking-number", ".confirmation-number",
-            ".receipt-id", "#application-id", ".tracking-id",
-            "[data-testid='confirmation-number']", "span:has-text('Confirmation:')",
-            "div:has-text('Tracking Number:')"
-        ]
-        for sel in tracking_selectors:
+        try:
+            elem = self.page.locator(self.COMBINED_SPECIFIC_TRACKING).first
+            if await elem.is_visible():
+                txt = (await elem.inner_text()).strip()
+                if txt:
+                    receipt_text = txt
+        except Exception:
+            pass
+
+        if not receipt_text:
             try:
-                elem = self.page.locator(sel).first
-                if await elem.is_visible(timeout=500):
+                elem = self.page.locator(self.COMBINED_BROAD_TRACKING).first
+                if await elem.is_visible():
                     txt = (await elem.inner_text()).strip()
                     if txt:
                         receipt_text = txt
-                        break
             except Exception:
-                continue
+                pass
 
-        if not receipt_text:
-            # Fallback regex search on body innerText
+        if receipt_text:
+            # If broad element was matched, extract the alphanumeric tracking identifier
+            match = re.search(r"(?:tracking|confirmation|reference|application)?\s*(?:#|id|number)?\s*[:\-]?\s*([A-Z0-9\-_]{6,35})", receipt_text, re.I)
+            if match and match.group(1):
+                receipt_text = match.group(1).strip()
+        else:
             body_text = await self.page.locator("body").inner_text()
             match = re.search(r"(?:tracking|confirmation|reference|application)\s*(?:#|id|number)?\s*[:\-]?\s*([A-Z0-9\-_]{6,35})", body_text, re.I)
             if match:
