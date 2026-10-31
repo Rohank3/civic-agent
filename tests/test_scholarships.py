@@ -188,3 +188,207 @@ async def test_user_isolated_custom_schemes():
     assert "custom_portal_alice" not in [s.id for s in alice_after]
 
 
+@pytest.mark.asyncio
+async def test_different_scholarship_aicte_pragati_girls():
+    """Verify checking AICTE Pragati Girls scholarship (different from central_sector_college)."""
+    client = ScholarshipRegistryClient()
+
+    # Eligible female candidate
+    female_student = CitizenProfile(
+        full_name="Kavya Nair",
+        date_of_birth="2004-03-15",
+        national_id="AADHAAR-4455-6677-8899",
+        email="kavya.nair@engg.ac.in",
+        phone="+91-9876543220",
+        address_street="12 Lake View Road",
+        address_city="Kochi",
+        address_state="Kerala",
+        address_zip="682001",
+        income_annual=350000.0,
+        household_size=4,
+        attributes={"percentage": 85.0, "gender": "FEMALE", "category": "GENERAL"}
+    )
+
+    results = await client.match_all_schemes(female_student)
+    pragati_match = next(r for r in results if r.scheme.id == "aicte_pragati_girls")
+    assert pragati_match.is_eligible is True
+    assert pragati_match.eligibility_score == 1.0
+    assert any("women's educational reservation" in r.lower() or "aicte pragati" in r.lower() for r in pragati_match.reasons)
+
+    # Ineligible male candidate for Pragati
+    male_student = CitizenProfile(
+        full_name="Arjun Menon",
+        date_of_birth="2004-03-15",
+        national_id="AADHAAR-4455-6677-8898",
+        email="arjun.menon@engg.ac.in",
+        phone="+91-9876543221",
+        address_street="12 Lake View Road",
+        address_city="Kochi",
+        address_state="Kerala",
+        address_zip="682001",
+        income_annual=350000.0,
+        household_size=4,
+        attributes={"percentage": 85.0, "gender": "MALE", "category": "GENERAL"}
+    )
+    male_results = await client.match_all_schemes(male_student)
+    pragati_male = next(r for r in male_results if r.scheme.id == "aicte_pragati_girls")
+    assert pragati_male.is_eligible is False
+    assert any("does not match target requirement" in m.lower() or "does not match scheme target" in m.lower() for m in pragati_male.missing_criteria)
+
+
+@pytest.mark.asyncio
+async def test_different_scholarship_post_matric_sc_st():
+    """Verify checking Post-Matric SC/ST scholarship."""
+    client = ScholarshipRegistryClient()
+
+    sc_student = CitizenProfile(
+        full_name="Deepak Kamble",
+        date_of_birth="2003-09-10",
+        national_id="AADHAAR-2233-4455-6677",
+        email="deepak.k@polytechnic.edu.in",
+        phone="+91-9876543230",
+        address_street="Station Road",
+        address_city="Nagpur",
+        address_state="Maharashtra",
+        address_zip="440001",
+        income_annual=180000.0,
+        household_size=5,
+        attributes={"percentage": 65.0, "category": "SC"}
+    )
+
+    results = await client.match_all_schemes(sc_student)
+    sc_match = next(r for r in results if r.scheme.id == "post_matric_sc_st")
+    assert sc_match.is_eligible is True
+    assert sc_match.eligibility_score == 1.0
+
+
+@pytest.mark.asyncio
+async def test_different_scholarship_ishan_uday_ner():
+    """Verify checking Ishan Uday North Eastern Region quota scholarship."""
+    client = ScholarshipRegistryClient()
+
+    # Eligible candidate domiciled in Assam
+    ner_student = CitizenProfile(
+        full_name="Tenzing Laskar",
+        date_of_birth="2003-12-05",
+        national_id="AADHAAR-3344-5566-7788",
+        email="tenzing@guwahati-univ.ac.in",
+        phone="+91-9876543240",
+        address_street="Brahmaputra Lane",
+        address_city="Guwahati",
+        address_state="Assam",
+        address_zip="781001",
+        income_annual=220000.0,
+        household_size=4,
+        attributes={"percentage": 72.0, "category": "GENERAL"}
+    )
+
+    results = await client.match_all_schemes(ner_student)
+    ishan_match = next(r for r in results if r.scheme.id == "ishan_uday_ner")
+    assert ishan_match.is_eligible is True
+    assert ishan_match.eligibility_score == 1.0
+
+
+@pytest.mark.asyncio
+async def test_live_web_scraper_subagent():
+    """Verify live web scraper subagent fetches and parses actual scholarships from official website."""
+    from app.domain.scholarships.subagents.web_scraper import ScholarshipScraperSubagent
+    scraper = ScholarshipScraperSubagent()
+    schemes, digest = await scraper.fetch_live_schemes_from_web()
+    assert isinstance(schemes, list)
+    if digest:
+        # If live internet was reachable, verify real scraped schemes
+        assert len(schemes) >= 10
+        titles = [s.name.lower() for s in schemes]
+        assert any("pragati" in t for t in titles)
+        assert any("aicte" in t or "scholarship" in t for t in titles)
+
+
+def test_dynamic_portal_generation_distinct_per_scheme():
+    """Verify dynamic portal generator produces unique, scheme-tailored HTML with zero hardcoded dummy names."""
+    from app.domain.scholarships.subagents.portal_generator import DynamicPortalSubagent
+
+    # Pragati portal
+    pragati_scheme = ScholarshipScheme(
+        id="aicte_pragati_girls",
+        name="AICTE Pragati Scholarship Scheme for Girl Students",
+        ministry="All India Council for Technical Education (AICTE)",
+        level="undergraduate",
+        target_category=["FEMALE"],
+        max_family_income=800000.0,
+        min_gpa_or_percentage=60.0,
+        grant_amount_annual=50000.0,
+        application_deadline="2026-12-15",
+        portal_url="https://scholarships.gov.in"
+    )
+    pragati_html = DynamicPortalSubagent.render_portal_html(pragati_scheme)
+    assert "AICTE Pragati" in pragati_html
+    assert "college_admission_letter" in pragati_html
+    assert "tuition_fee_receipt" in pragati_html
+    assert "Eleanor Vance" not in pragati_html
+
+    # Post-Matric SC/ST portal
+    sc_scheme = ScholarshipScheme(
+        id="post_matric_sc_st",
+        name="Post-Matric Scholarship for SC/ST Candidates",
+        ministry="Ministry of Social Justice and Empowerment",
+        level="undergraduate",
+        target_category=["SC", "ST"],
+        max_family_income=250000.0,
+        min_gpa_or_percentage=50.0,
+        grant_amount_annual=35000.0,
+        application_deadline="2026-11-30",
+        portal_url="https://scholarships.gov.in"
+    )
+    sc_html = DynamicPortalSubagent.render_portal_html(sc_scheme)
+    assert "Post-Matric" in sc_html
+    assert "caste_cert_no" in sc_html
+    assert "caste_proof" in sc_html
+    assert "Eleanor Vance" not in sc_html
+
+
+@pytest.mark.asyncio
+async def test_batch_application_subagent():
+    """Verify batch application subagent orchestrates multiple eligible schemes."""
+    from app.domain.scholarships.subagents.batch_orchestrator import BatchApplicationSubagent
+
+    batch_subagent = BatchApplicationSubagent()
+    student = CitizenProfile(
+        full_name="Kavya Nair",
+        date_of_birth="2004-03-15",
+        national_id="AADHAAR-4455-6677-8899",
+        email="kavya@engg.ac.in",
+        phone="+91-9876543220",
+        address_street="12 Lake View Road",
+        address_city="Kochi",
+        address_state="Kerala",
+        address_zip="682001",
+        income_annual=200000.0,
+        household_size=4,
+        attributes={"percentage": 90.0, "gender": "FEMALE", "category": "GENERAL"}
+    )
+
+    client = ScholarshipRegistryClient()
+    schemes = await client.fetch_live_schemes()
+    eligible = batch_subagent.get_eligible_schemes(student, schemes)
+    # Student is eligible for both Pragati Girls AND Central Sector College
+    eligible_ids = [e.scheme.id for e in eligible]
+    assert "aicte_pragati_girls" in eligible_ids
+    assert "central_sector_college" in eligible_ids
+
+    executed_records = []
+    async def mock_execute(scheme, prof):
+        record = {
+            "tracking_number": f"TEST-TRACK-{scheme.id[:6].upper()}-001",
+            "sha256_hash": "mockhash123",
+            "scheme_id": scheme.id
+        }
+        executed_records.append(record)
+        return record
+
+    results = await batch_subagent.run_batch_application_plan(student, schemes, mock_execute)
+    assert len(results) >= 2
+    assert all(r["status"] == "SUCCESS" for r in results)
+
+
+
