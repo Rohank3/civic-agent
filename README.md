@@ -14,11 +14,13 @@ An autonomous web/browser execution agent powered by Playwright and FastAPI that
    - Evaluates eligibility thresholds (family income caps, GPA/percentage cut-offs, reservation categories, state domicile) dynamically.
 
 2. **Multimodal Document Intelligence Pre-flight**:
-   - Ingests student transcript and marksheet PDFs.
-   - Extracts verified GPA, roll number, academic department, and institution name *before* launching the browser to prevent rejected applications.
+   - Ingests student transcript and income certificate PDFs/images.
+   - Powered by Google Gemini 3.5 Flash to extract verified GPA, roll number, academic department, institution, and annual income *before* launching the browser to prevent rejected applications.
 
-3. **Autonomous Browser Navigation & Obstacle Solving**:
+3. **Autonomous Browser Navigation & Anti-Bot Stealth**:
    - Resilient Playwright automation engine equipped with heuristic form field mapping and multimodal vision fallback.
+   - Anti-bot stealth micro-cadence (40–85ms randomized keystroke jitter) eliminating bot detection and Cloudflare/WAF IP bans.
+   - Operator Stepper mode supporting Pause, Resume, and Step-by-Step wizard navigation.
    - Automatically detects and resolves UI obstacles: modal popups, cookie consents, alert dialogs, and dynamic category cascades.
    - Implements pre-submission self-reflection to verify interactive DOM controls before committing.
 
@@ -92,10 +94,12 @@ Interactive API documentation available at: `http://localhost:8000/docs`
 
 ### Bureaucracy Execution
 - `POST /v1/services/preflight`: Evaluate student application completeness and sufficiency score without launching browser.
-- `POST /v1/services/execute`: Ingest profile and launch autonomous browser execution.
+- `POST /v1/services/execute-live`: Launch real Playwright Chromium browser session with real-time WebSocket screencast.
+- `POST /v1/services/{case_id}/control`: Operator control endpoint (pause, resume, step, skip).
 - `GET /v1/services/{case_id}/status`: Query live execution state and progress milestones.
 - `POST /v1/services/{case_id}/signature`: Submit citizen digital consent for final legal submission.
 - `GET /v1/services/{case_id}/receipt`: Retrieve cryptographic audit receipt with tracking number and visual proof.
+- `GET /portal/scholarship`: Embedded statutory portal mirror with modal obstacles for offline evaluation.
 
 ### Real-Time Telemetry
 - `WebSocket /ws/telemetry/{case_id}`: Stream live browser screencast frames and agent reasoning logs directly to the frontend cockpit.
