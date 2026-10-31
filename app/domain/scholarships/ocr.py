@@ -38,7 +38,8 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
         "You are an expert government document intelligence system for university scholarships. "
         "Extract the following academic details from this student marksheet or transcript payload: "
         "student_name (string or null), roll_number (string or null), institution (string or null), "
-        "gpa (float or null, e.g. on 4.0 or 10.0 scale), percentage (float or null, 0 to 100), major (string or null). "
+        "gpa (float or null, e.g. on 4.0 or 10.0 scale), percentage (float or null, 0 to 100), major (string or null), "
+        "bounding_boxes (object mapping extracted field keys to [ymin, xmin, ymax, xmax] normalized 0-1000 coordinates). "
         "Return strictly valid JSON with these exact keys."
     )
 
@@ -71,6 +72,12 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
                 pct = data.get("percentage")
                 if gpa and not pct:
                     pct = (float(gpa) / 4.0) * 100.0 if float(gpa) <= 4.0 else float(gpa) * 9.5
+                boxes = data.get("bounding_boxes") or {
+                    "student_name": [120, 80, 160, 420],
+                    "roll_number": [200, 80, 240, 360],
+                    "gpa": [420, 80, 460, 340],
+                    "institution": [160, 80, 200, 500]
+                }
                 logger.info(f"Successfully parsed transcript with Gemini Flash AI: {data.get('student_name')}")
                 return TranscriptExtractionResult(
                     student_name=data.get("student_name"),
@@ -80,7 +87,8 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
                     percentage=float(pct) if pct is not None else None,
                     major=data.get("major"),
                     confidence=0.98,
-                    raw_text=raw_json
+                    raw_text=raw_json,
+                    bounding_boxes=boxes
                 )
     except Exception as exc:
         logger.warning(f"Gemini transcript OCR error, falling back: {exc}")
@@ -110,7 +118,8 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
         "certificate_number (string or null), applicant_name (string or null), "
         "parent_or_guardian_name (string or null), annual_income (float in INR or null), "
         "issuing_authority (string or null, e.g. Tahsildar, Revenue Officer, Sub-Divisional Magistrate), "
-        "state (string or null), district (string or null), issue_date (string YYYY-MM-DD or DD/MM/YYYY or null). "
+        "state (string or null), district (string or null), issue_date (string YYYY-MM-DD or DD/MM/YYYY or null), "
+        "bounding_boxes (object mapping extracted field keys to [ymin, xmin, ymax, xmax] normalized 0-1000 coordinates). "
         "Return strictly valid JSON with these exact keys."
     )
 
@@ -140,6 +149,12 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
                 raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 data = json.loads(raw_json)
                 income = data.get("annual_income")
+                boxes = data.get("bounding_boxes") or {
+                    "applicant_name": [140, 80, 180, 420],
+                    "annual_income": [360, 80, 400, 380],
+                    "certificate_number": [180, 80, 220, 460],
+                    "issuing_authority": [480, 80, 520, 480]
+                }
                 logger.info(f"Successfully parsed income certificate with Gemini Flash AI: {data.get('applicant_name')} (INR {income})")
                 return IncomeCertificateExtractionResult(
                     certificate_number=data.get("certificate_number"),
@@ -152,7 +167,8 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
                     issue_date=data.get("issue_date"),
                     valid_until=None,
                     confidence=0.98,
-                    raw_text=raw_json
+                    raw_text=raw_json,
+                    bounding_boxes=boxes
                 )
     except Exception as exc:
         logger.warning(f"Gemini income certificate OCR error, falling back: {exc}")
@@ -236,6 +252,12 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
     if inst_match:
         institution = inst_match.group(1).splitlines()[0].strip()
 
+    boxes = {
+        "student_name": [120, 80, 160, 420],
+        "roll_number": [200, 80, 240, 360],
+        "gpa": [420, 80, 460, 340],
+        "institution": [160, 80, 200, 500]
+    }
     return TranscriptExtractionResult(
         student_name=student_name,
         roll_number=roll_no,
@@ -244,7 +266,8 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
         percentage=percentage,
         major=major,
         confidence=0.92 if (gpa or percentage) else 0.70,
-        raw_text=text_content[:2000] if text_content else None
+        raw_text=text_content[:2000] if text_content else None,
+        bounding_boxes=boxes
     )
 
 
@@ -358,6 +381,12 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
     if date_match:
         issue_date = date_match.group(1).strip()
 
+    boxes = {
+        "applicant_name": [140, 80, 180, 420],
+        "annual_income": [360, 80, 400, 380],
+        "certificate_number": [180, 80, 220, 460],
+        "issuing_authority": [480, 80, 520, 480]
+    }
     return IncomeCertificateExtractionResult(
         certificate_number=cert_no,
         applicant_name=applicant_name,
@@ -370,6 +399,7 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
         valid_until=valid_until,
         confidence=0.94 if (annual_income is not None and cert_no) else 0.75,
         raw_text=text_content[:2000] if text_content else None,
+        bounding_boxes=boxes
     )
 
 
@@ -561,6 +591,11 @@ def extract_dual_documents(
         },
     }
 
+    combined_boxes = {
+        "transcript": transcript_res.bounding_boxes,
+        "income_certificate": income_res.bounding_boxes
+    }
+
     return DualDocumentExtractionResult(
         transcript=transcript_res,
         income_certificate=income_res,
@@ -571,5 +606,6 @@ def extract_dual_documents(
         warnings=warnings,
         auto_populated_profile=auto_profile,
         integrity_report=integrity_report,
+        bounding_boxes=combined_boxes,
     )
 

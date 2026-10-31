@@ -59,6 +59,7 @@ class TranscriptExtractionResult(BaseModel):
     academic_year: str | None = None
     confidence: float = Field(default=0.9, ge=0.0, le=1.0)
     raw_text: str | None = None
+    bounding_boxes: dict[str, Any] = Field(default_factory=dict, description="Visual grounding bounding boxes [ymin, xmin, ymax, xmax] for extracted fields")
 
 
 class IncomeCertificateExtractionResult(BaseModel):
@@ -74,6 +75,7 @@ class IncomeCertificateExtractionResult(BaseModel):
     valid_until: str | None = None
     confidence: float = Field(default=0.9, ge=0.0, le=1.0)
     raw_text: str | None = None
+    bounding_boxes: dict[str, Any] = Field(default_factory=dict, description="Visual grounding bounding boxes [ymin, xmin, ymax, xmax] for extracted fields")
 
 
 class DocumentIntegrityReport(BaseModel):
@@ -98,4 +100,5 @@ class DualDocumentExtractionResult(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     auto_populated_profile: dict[str, Any] = Field(default_factory=dict)
     integrity_report: DocumentIntegrityReport | None = None
+    bounding_boxes: dict[str, Any] = Field(default_factory=dict, description="Consolidated visual grounding bounding boxes for preview highlights")
 

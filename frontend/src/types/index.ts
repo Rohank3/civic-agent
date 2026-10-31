@@ -72,6 +72,7 @@ export interface TranscriptData {
   academic_year?: string | null;
   confidence: number;
   raw_text?: string | null;
+  bounding_boxes?: Record<string, any>;
 }
 
 export interface IncomeCertificateData {
@@ -87,6 +88,7 @@ export interface IncomeCertificateData {
   valid_until?: string | null;
   confidence: number;
   raw_text?: string | null;
+  bounding_boxes?: Record<string, any>;
 }
 
 export interface DocumentIntegrityReport {
@@ -111,6 +113,7 @@ export interface DualDocumentExtractionResult {
   warnings: string[];
   auto_populated_profile: CitizenProfile;
   integrity_report?: DocumentIntegrityReport | null;
+  bounding_boxes?: Record<string, any>;
 }
 
 export type ActorRole = 
