@@ -26,7 +26,7 @@ class VisionLocator:
         http_client: httpx.AsyncClient | None = None
     ):
         self.api_key = api_key or os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
+        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-flash-lite-latest"
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
         self._http_client = http_client
         self._owns_http_client = http_client is None
@@ -66,7 +66,7 @@ class VisionLocator:
                 screenshot_bytes = await page.screenshot(type="jpeg", quality=65)
                 b64_image = base64.b64encode(screenshot_bytes).decode("ascii")
 
-                url = f"{self.base_url}/{self.model}:generateContent?key={self.api_key}"
+                url = f"{self.base_url}/{self.model}:generateContent"
                 prompt = (
                     f"Look at this web page screenshot. Locate the interactive button, link, or input labeled '{label}'. "
                     "Return ONLY valid JSON with normalized coordinates between 0 and 1: "
@@ -82,7 +82,11 @@ class VisionLocator:
                     "generationConfig": {"responseMimeType": "application/json"}
                 }
                 client = await self._get_client()
-                resp = await client.post(url, json=payload)
+                resp = await client.post(
+                    url,
+                    headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
+                    json=payload
+                )
                 if resp.status_code == 200:
                     raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                     data = json.loads(raw)

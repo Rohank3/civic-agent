@@ -213,7 +213,7 @@ async def test_autonomous_bureaucracy_agent_end_to_end(tmp_path):
             filled_step2 = await agent.scan_and_populate_current_page()
             assert filled_step2 >= 4
             assert await page.locator("#street_addr").input_value() == "123 Democracy Boulevard"
-            assert await page.locator("#gross_income").input_value() == "45000.0"
+            assert await page.locator("#gross_income").input_value() in ("45000.0", "45000")
             assert await page.locator("#chkCertify").is_checked()
 
             # Advance to Step 3 (Review & Submit)

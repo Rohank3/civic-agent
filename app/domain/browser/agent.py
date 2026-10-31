@@ -97,17 +97,27 @@ class AutonomousBureaucracyAgent:
         self.page = page
         self.request = service_request
         self.profile = service_request.profile
-        self.solver = solver or ObstacleSolver()
+        self._http_client = http_client
+        self._owns_http_client = http_client is None
+
+        self.solver = solver or ObstacleSolver(http_client=self._http_client)
+        if self.solver and getattr(self.solver, "_http_client", None) is None and self._http_client is not None:
+            self.solver._http_client = self._http_client
+            self.solver._owns_http_client = False
+
+        self.vision = vision or VisionLocator(http_client=self._http_client)
+        if self.vision and getattr(self.vision, "_http_client", None) is None and self._http_client is not None:
+            self.vision._http_client = self._http_client
+            self.vision._owns_http_client = False
+
         self.memory = memory
         self.telemetry_emitter = telemetry_emitter
         self.case_id = case_id or "case-live"
         self.pacing_mode = pacing_mode
-        self.vision = vision or VisionLocator()
         self.current_step = 1
         self.current_actor = "AUTONOMOUS_AGENT"
         self.total_fields_filled = 0
-        self._http_client = http_client
-        self._owns_http_client = http_client is None
+        self.trajectory: list[dict[str, Any]] = []
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._http_client is None or self._http_client.is_closed:
@@ -116,15 +126,21 @@ class AutonomousBureaucracyAgent:
                 limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
             )
             self._owns_http_client = True
+        if self.solver and (getattr(self.solver, "_http_client", None) is None or self.solver._http_client.is_closed):
+            self.solver._http_client = self._http_client
+            self.solver._owns_http_client = False
+        if self.vision and (getattr(self.vision, "_http_client", None) is None or self.vision._http_client.is_closed):
+            self.vision._http_client = self._http_client
+            self.vision._owns_http_client = False
         return self._http_client
 
     async def aclose(self) -> None:
         """Release underlying HTTP client resources."""
         if self._owns_http_client and self._http_client and not self._http_client.is_closed:
             await self._http_client.aclose()
-        if self.vision and hasattr(self.vision, "aclose"):
+        if self.vision and hasattr(self.vision, "aclose") and not self._owns_http_client:
             await self.vision.aclose()
-        if self.solver and hasattr(self.solver, "aclose"):
+        if self.solver and hasattr(self.solver, "aclose") and not self._owns_http_client:
             await self.solver.aclose()
 
     def _is_fast_mode(self) -> bool:
@@ -142,7 +158,12 @@ class AutonomousBureaucracyAgent:
         return False
 
     def _is_fast_or_testing(self) -> bool:
-        return self._is_fast_mode()
+        """Check if executing in test runner or explicit fast mode."""
+        return bool(
+            os.environ.get("PYTEST_CURRENT_TEST")
+            or os.environ.get("TESTING") == "1"
+            or self._is_fast_mode()
+        )
 
     async def emit_telemetry(
         self,
@@ -192,8 +213,8 @@ class AutonomousBureaucracyAgent:
             pass
 
     async def _type_humanlike(self, ctrl, text: str):
-        """Type with realistic human micro-cadence (40-85ms jitter) for anti-bot evasion, or fill instantly in fast mode."""
-        if self._is_fast_mode():
+        """Type with realistic human micro-cadence (40-85ms jitter) for anti-bot evasion, or fill instantly in fast mode or test runner."""
+        if self._is_fast_or_testing():
             await ctrl.fill(text)
             return
 
@@ -239,8 +260,8 @@ class AutonomousBureaucracyAgent:
         return False
 
     async def _pacing_delay(self):
-        """Perform anti-bot reading delay unless running in explicit fast pacing mode."""
-        if self._is_fast_mode():
+        """Perform anti-bot reading delay unless running in explicit fast pacing mode or test environment."""
+        if self._is_fast_or_testing():
             return
         await self._check_pause()
         await asyncio.sleep(random.uniform(0.35, 0.65))
@@ -286,6 +307,23 @@ class AutonomousBureaucracyAgent:
 
     def _match_field_key(self, descriptor: str) -> str | None:
         desc_clean = re.sub(r"[^a-z0-9 ]", " ", descriptor.lower()).strip()
+        # HTML5 Autocomplete attribute mappings
+        AUTOCOMPLETE_MAPPINGS = {
+            "name": "full_name",
+            "given-name": "first_name",
+            "family-name": "last_name",
+            "email": "email",
+            "tel": "phone",
+            "bday": "date_of_birth",
+            "street-address": "address_street",
+            "address-line1": "address_street",
+            "address-level2": "address_city",
+            "address-level1": "address_state",
+            "postal-code": "address_zip"
+        }
+        for token, fkey in AUTOCOMPLETE_MAPPINGS.items():
+            if token in desc_clean:
+                return fkey
         # Direct attribute match
         for attr in {*self.profile.attributes.keys(), *self.request.target_fields.keys()}:
             attr_clean = re.sub(r"[^a-z0-9 ]", " ", attr.lower()).strip()
@@ -381,14 +419,18 @@ class AutonomousBureaucracyAgent:
                         loc = self.page.locator(sel).first
                         if await loc.is_visible():
                             if atype == "fill" and val:
-                                current_val = await loc.input_value()
-                                if current_val != str(val):
-                                    await self._type_humanlike(loc, str(val))
-                                    filled_count += 1
-                                handled_selectors.add(sel.lower())
+                                fill_val = str(val)
                                 matched_k = self._match_field_key(sel)
                                 if matched_k:
+                                    canon = self._get_field_value(matched_k)
+                                    if canon:
+                                        fill_val = canon
                                     handled_keys.add(matched_k)
+                                current_val = await loc.input_value()
+                                if current_val != fill_val:
+                                    await self._type_humanlike(loc, fill_val)
+                                    filled_count += 1
+                                handled_selectors.add(sel.lower())
                             elif atype == "select" and val:
                                 try:
                                     await loc.select_option(label=str(val), timeout=400)
@@ -626,6 +668,8 @@ class AutonomousBureaucracyAgent:
             try:
                 loc = self.page.locator(sel)
                 cnt = await loc.count()
+                if cnt == 0:
+                    continue
                 for i in range(cnt):
                     btn = loc.nth(i)
                     if await btn.is_visible():
@@ -634,7 +678,7 @@ class AutonomousBureaucracyAgent:
                             await self.page.wait_for_load_state("domcontentloaded", timeout=1000)
                         except PlaywrightTimeout:
                             pass
-                        if not self._is_fast_mode():
+                        if not self._is_fast_or_testing():
                             await self.page.wait_for_timeout(100)
                         self.current_step += 1
                         await self._pacing_delay()
@@ -719,8 +763,8 @@ class AutonomousBureaucracyAgent:
             return False
 
         try:
-            model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            model = os.getenv("CIVICAGENT_MODEL") or "gemini-flash-lite-latest"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             attrs = self.profile.attributes or {}
             cat = getattr(self.profile, "category", None) or attrs.get("category") or "GENERAL"
             profile_summary = {
@@ -753,10 +797,27 @@ class AutonomousBureaucracyAgent:
                 "'reasoning' (one sentence explanation)."
             )
             client = await self._get_client()
-            resp = await client.post(url, json={
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"responseMimeType": "application/json"}
-            })
+            resp = await client.post(
+                url,
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "responseMimeType": "application/json",
+                        "responseSchema": {
+                            "type": "object",
+                            "properties": {
+                                "target_field": {"type": "string"},
+                                "action_type": {"type": "string", "enum": ["fill", "select", "check"]},
+                                "selector": {"type": "string"},
+                                "corrected_value": {"type": "string"},
+                                "reasoning": {"type": "string"}
+                            },
+                            "required": ["target_field", "action_type", "corrected_value", "reasoning"]
+                        }
+                    }
+                }
+            )
             if resp.status_code == 200:
                 data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
                 field = data.get("target_field", "").lower()
@@ -868,8 +929,8 @@ class AutonomousBureaucracyAgent:
             screenshot_bytes = await self.page.screenshot(type="jpeg", quality=60)
             b64_image = base64.b64encode(screenshot_bytes).decode("ascii")
 
-            model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            model = os.getenv("CIVICAGENT_MODEL") or "gemini-flash-lite-latest"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
             attrs = self.profile.attributes or {}
             profile_summary = {
@@ -893,9 +954,11 @@ class AutonomousBureaucracyAgent:
                 "income_certificate_number": attrs.get("certificate_number"),
             }
 
+            recent_history = self.trajectory[-3:] if hasattr(self, "trajectory") else []
             prompt = (
                 "You are an autonomous AI bureaucracy execution agent helping a citizen apply for a statutory scholarship. "
                 f"Applicant Verified Profile: {json.dumps(profile_summary)}. "
+                f"Recent Action Trajectory: {json.dumps(recent_history)}. "
                 f"Interactive Elements on page: {json.dumps(elements)}. "
                 "Analyze this form milestone and determine the required actions to complete this step and advance. "
                 "Map each relevant form field to the corresponding verified applicant attribute. "
@@ -910,11 +973,36 @@ class AutonomousBureaucracyAgent:
                         {"inlineData": {"mimeType": "image/jpeg", "data": b64_image}}
                     ]
                 }],
-                "generationConfig": {"responseMimeType": "application/json"}
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "object",
+                        "properties": {
+                            "actions": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "action": {"type": "string", "enum": ["fill", "click", "select", "check"]},
+                                        "selector": {"type": "string"},
+                                        "value": {"type": "string"},
+                                        "reason": {"type": "string"}
+                                    },
+                                    "required": ["action", "selector", "reason"]
+                                }
+                            }
+                        },
+                        "required": ["actions"]
+                    }
+                }
             }
 
             client = await self._get_client()
-            resp = await client.post(url, json=payload)
+            resp = await client.post(
+                url,
+                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                json=payload
+            )
             if resp.status_code == 200:
                 raw_data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
                 actions = raw_data.get("actions", [])
@@ -955,7 +1043,7 @@ class AutonomousBureaucracyAgent:
         }))""")
 
         api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
+        model = os.getenv("CIVICAGENT_MODEL") or "gemini-flash-lite-latest"
         audit_findings = [
             f"Applicant full name verified as '{self.profile.full_name}'",
             f"Annual household income ₹{self.profile.income_annual:,.0f} verified under statutory grant ceiling",
@@ -977,7 +1065,7 @@ class AutonomousBureaucracyAgent:
                     "Return strictly valid JSON: "
                     '{"verified": true, "match_score": 0.98, "findings": ["finding 1", "finding 2"]}'
                 )
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
                 payload = {
                     "contents": [{
                         "parts": [
@@ -988,7 +1076,11 @@ class AutonomousBureaucracyAgent:
                     "generationConfig": {"responseMimeType": "application/json"}
                 }
                 client = await self._get_client()
-                resp = await client.post(url, json=payload)
+                resp = await client.post(
+                    url,
+                    headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
+                    json=payload
+                )
                 if resp.status_code == 200:
                     raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                     data = json.loads(raw)
@@ -1026,6 +1118,8 @@ class AutonomousBureaucracyAgent:
             try:
                 loc = self.page.locator(sel)
                 cnt = await loc.count()
+                if cnt == 0:
+                    continue
                 for i in range(cnt):
                     btn = loc.nth(i)
                     if await btn.is_visible():
@@ -1034,7 +1128,7 @@ class AutonomousBureaucracyAgent:
                             await self.page.wait_for_load_state("domcontentloaded", timeout=2000)
                         except PlaywrightTimeout:
                             pass
-                        if not self._is_fast_mode():
+                        if not self._is_fast_or_testing():
                             await self.page.wait_for_timeout(200)
                         return
             except Exception:

@@ -33,7 +33,7 @@ class ObstacleSolver:
         self.redis = redis
         self.vision_client = vision_client
         self.api_key = api_key or os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
+        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-flash-lite-latest"
         self._http_client = http_client
         self._owns_http_client = http_client is None
 
@@ -62,7 +62,8 @@ class ObstacleSolver:
                 btn = loc.nth(i)
                 if await btn.is_visible():
                     await btn.click()
-                    await page.wait_for_timeout(100)
+                    if not (os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("TESTING") == "1"):
+                        await page.wait_for_timeout(100)
                     return True
         except Exception as e:
             logger.debug(f"Combined overlay dismissal check: {e}")
@@ -108,9 +109,8 @@ class ObstacleSolver:
             for sel in matched_selectors:
                 try:
                     loc = page.locator(sel).first
-                    if await loc.is_visible():
-                        await loc.check(timeout=500)
-                        count += 1
+                    await loc.check(timeout=500)
+                    count += 1
                 except Exception:
                     try:
                         await loc.click(timeout=500)
@@ -131,7 +131,7 @@ class ObstacleSolver:
             b64_img = base64.b64encode(screenshot_bytes).decode("ascii")
 
             if self.api_key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
                 prompt = (
                     "Extract the characters or solve the simple math puzzle shown in this CAPTCHA image. "
                     "Reply ONLY with the final alphanumeric solution string, nothing else."
@@ -146,7 +146,11 @@ class ObstacleSolver:
                     "generationConfig": {"temperature": 0.0}
                 }
                 client = await self._get_client()
-                resp = await client.post(url, json=payload)
+                resp = await client.post(
+                    url,
+                    headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
+                    json=payload
+                )
                 if resp.status_code == 200:
                     solution = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                     clean_solution = re.sub(r"[^A-Za-z0-9]", "", solution)

@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -24,6 +25,20 @@ TRUSTED_IDENTITY_AND_CDNS = (
 )
 
 
+_TRUSTED_SUFFIXES = (
+    ".gov", ".gov.in", ".gov.uk", ".gov.au", ".nic.in",
+    ".edu", ".edu.in", ".mil"
+)
+
+_TRUSTED_EXACT_HOSTS = {
+    "login.gov", "id.me", "accounts.google.com", "auth0.com", "okta.com",
+    "cloudflare.com", "challenges.cloudflare.com", "recaptcha.net",
+    "google.com", "gstatic.com", "hcaptcha.com", "akamaihd.net",
+    "bootstrapcdn.com", "cdnjs.cloudflare.com", "unpkg.com",
+    "localhost", "127.0.0.1"
+}
+
+
 def origin(url: str) -> str:
     parsed = urlsplit(url)
     if parsed.scheme not in ("https", "http") or not parsed.netloc or parsed.username:
@@ -33,20 +48,32 @@ def origin(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-def is_allowed_host(host: str, base_host: str, explicit_allowed: set[str]) -> bool:
+def is_allowed_host(
+    host: str,
+    base_host: str,
+    explicit_allowed: set[str],
+    cache: dict[str, bool] | None = None
+) -> bool:
+    if not host:
+        return False
     host = host.lower()
+    if cache is not None and host in cache:
+        return cache[host]
+
     base_host = base_host.lower()
+    allowed = False
     if host == base_host or host.endswith("." + base_host):
-        return True
-    if host in explicit_allowed:
-        return True
-    if host in ("localhost", "127.0.0.1"):
-        return True
-    if any(host.endswith(suffix) for suffix in TRUSTED_DOMAINS_SUFFIXES):
-        return True
-    if any(host == trusted or host.endswith("." + trusted) for trusted in TRUSTED_IDENTITY_AND_CDNS):
-        return True
-    return False
+        allowed = True
+    elif host in explicit_allowed or host in _TRUSTED_EXACT_HOSTS:
+        allowed = True
+    elif any(host.endswith(suffix) for suffix in _TRUSTED_SUFFIXES):
+        allowed = True
+    elif any(host.endswith("." + trusted) for trusted in TRUSTED_IDENTITY_AND_CDNS):
+        allowed = True
+
+    if cache is not None:
+        cache[host] = allowed
+    return allowed
 
 
 class SessionManager:
@@ -74,9 +101,13 @@ class SessionManager:
         cached = await self.redis.get(key)
         state = json.loads(self.cipher.open(cached, key)) if cached else {}
 
-        should_record_video = bool(profile.get("record_video", True))
-        should_trace = bool(profile.get("tracing", True))
+        is_testing = bool(os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("TESTING") == "1")
+        default_trace_and_video = not is_testing
+        should_record_video = bool(profile.get("record_video", default_trace_and_video))
+        should_trace = bool(profile.get("tracing", default_trace_and_video))
 
+        browser: Any = None
+        ctx: BrowserContext | None = None
         async with async_playwright() as pw, self._recording(case) as directory:
             endpoint = profile.get("cdp_endpoint")
             low_mem_args = [
@@ -89,11 +120,11 @@ class SessionManager:
                 "--disable-features=Translate,BackForwardCache", "--disable-ipc-flooding-protection",
                 "--disable-renderer-backgrounding"
             ]
-            browser = (
-                await pw.chromium.connect_over_cdp(endpoint) if endpoint
-                else await pw.chromium.launch(headless=True, args=low_mem_args)
-            )
             try:
+                browser = (
+                    await pw.chromium.connect_over_cdp(endpoint) if endpoint
+                    else await pw.chromium.launch(headless=True, args=low_mem_args)
+                )
                 ctx_kwargs: dict[str, Any] = {
                     "viewport": {"width": 1920, "height": 1080},
                     "proxy": proxy,
@@ -103,7 +134,7 @@ class SessionManager:
                 if should_record_video and directory:
                     ctx_kwargs["record_video_dir"] = directory
 
-                ctx: BrowserContext = await browser.new_context(**ctx_kwargs)
+                ctx = await browser.new_context(**ctx_kwargs)
                 try:
                     if should_trace:
                         await ctx.tracing.start(screenshots=True, snapshots=True, sources=False)
@@ -118,17 +149,33 @@ class SessionManager:
                         f"for (const [k,v] of Object.entries(({sessions})[location.origin] || {{}})) sessionStorage.setItem(k,v)"
                     )
 
+                    # Host cache to avoid repeated regex & suffix evaluation per static asset
+                    host_cache: dict[str, bool] = {
+                        base_host.lower(): True,
+                        "localhost": True,
+                        "127.0.0.1": True,
+                        **{h.lower(): True for h in explicit_allowed if h},
+                        **{h: True for h in _TRUSTED_EXACT_HOSTS}
+                    }
+
                     async def guard(route):
                         try:
                             req_url = route.request.url
-                            parsed = urlsplit(req_url)
-                            if parsed.scheme in ("https", "http") and parsed.hostname:
-                                if is_allowed_host(parsed.hostname, base_host, explicit_allowed):
-                                    await route.continue_()
-                                    return
-                            elif req_url.startswith("data:") or req_url.startswith("blob:"):
+                            if req_url.startswith("data:") or req_url.startswith("blob:"):
                                 await route.continue_()
                                 return
+
+                            # Fast host extraction without full urlsplit overhead
+                            start = req_url.find("://")
+                            if start != -1:
+                                host_part = req_url[start + 3:].split("/", 1)[0].split(":", 1)[0]
+                                if is_allowed_host(host_part, base_host, explicit_allowed, host_cache):
+                                    await route.continue_()
+                                    return
+                            elif req_url.startswith("/"):
+                                await route.continue_()
+                                return
+
                             await route.abort()
                         except Exception as e:
                             logger.debug(f"Guard route abort notice: {e}")
@@ -157,7 +204,7 @@ class SessionManager:
 
                     sessions_map = state.get("sessions", {})
                     curr_host = urlsplit(page.url).hostname or ""
-                    if is_allowed_host(curr_host, base_host, explicit_allowed):
+                    if is_allowed_host(curr_host, base_host, explicit_allowed, host_cache):
                         sessions_map[origin(page.url)] = await page.evaluate("Object.fromEntries(Object.entries(sessionStorage))")
                     raw = json.dumps({"sessions": sessions_map, "storage": await ctx.storage_state()}).encode()
                     await self.redis.set(key, self.cipher.seal(raw, key),
@@ -169,13 +216,20 @@ class SessionManager:
                     except Exception as trace_err:
                         logger.debug(f"Tracing stop notice: {trace_err}")
                     finally:
-                        await ctx.close()
+                        try:
+                            await ctx.close()
+                        except Exception as ctx_err:
+                            logger.debug(f"Context close error: {ctx_err}")
             finally:
-                await browser.close()
+                if browser:
+                    try:
+                        await browser.close()
+                    except Exception as b_err:
+                        logger.debug(f"Browser close error: {b_err}")
 
     @asynccontextmanager
     async def _recording(self, case: str):
-        with tempfile.TemporaryDirectory() as directory:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             try:
                 yield directory
             finally:
