@@ -13,6 +13,7 @@ pinned: false
 > **Track**: Civic Pulse, Digital Governance & Public Information  
 > **Problem Spectrum**: Autonomous Public Service & Bureaucracy Execution Agent  
 > **Repository**: [https://github.com/Rohank3/civic-agent](https://github.com/Rohank3/civic-agent) (Public)  
+> **Live Prototype**: [https://civic-agent-alpha.vercel.app](https://civic-agent-alpha.vercel.app)  
 > **Submission Document**: [SUBMISSION.md](SUBMISSION.md) | **Pitch Deck**: [PITCH_DECK.md](PITCH_DECK.md)
 
 An autonomous web/browser execution agent powered by Playwright and FastAPI that ingests a student's demographic profile, queries live open government data (`data.gov.in`) for active statutory scholarships, extracts verified academic criteria via multimodal OCR, navigates complex multi-step legacy portals, populates application forms, handles UI obstacles, and returns completed tracking receipts with cryptographic SHA-256 audit proofs.
