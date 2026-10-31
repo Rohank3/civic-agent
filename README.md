@@ -17,17 +17,25 @@ An autonomous web/browser execution agent powered by Playwright and FastAPI that
    - Ingests student transcript and income certificate PDFs/images.
    - Powered by Google Gemini 3.5 Flash to extract verified GPA, roll number, academic department, institution, and annual income *before* launching the browser to prevent rejected applications.
 
-3. **Autonomous Browser Navigation & Anti-Bot Stealth**:
-   - Resilient Playwright automation engine equipped with heuristic form field mapping and multimodal vision fallback.
+3. **Autonomous Browser Navigation & Multimodal ReAct Planning**:
+   - Resilient Playwright automation engine equipped with a **Gemini Flash Multimodal ReAct Planner** that inspects interactive DOM accessibility trees and viewport screenshots to generate structured action sequences on novel forms.
+   - Vision Grounding Fallback: uses Gemini Vision to ground coordinates and click unmapped buttons, dropdowns, and links.
    - Anti-bot stealth micro-cadence (40–85ms randomized keystroke jitter) eliminating bot detection and Cloudflare/WAF IP bans.
-   - Operator Stepper mode supporting Pause, Resume, and Step-by-Step wizard navigation.
+   - Operator Stepper mode supporting Pause, Resume, Step-by-Step wizard navigation, and Fast-Forward typing overrides.
    - Automatically detects and resolves UI obstacles: modal popups, cookie consents, alert dialogs, and dynamic category cascades.
    - Implements pre-submission self-reflection to verify interactive DOM controls before committing.
 
-4. **Human-in-the-Loop (HITL) Guardrails & Audit Receipts**:
+4. **Human-in-the-Loop (HITL) Guardrails & Cryptographic Receipts**:
    - Real-time WebSocket telemetry stream broadcasting reasoning steps and browser screencast frames.
-   - Pauses on final legal declarations for explicit citizen digital consent.
-   - Extracts official government tracking numbers and produces tamper-evident SHA-256 cryptographic audit receipts.
+   - Pauses on final legal declarations for explicit citizen digital signature via HTML5 canvas pad.
+   - Extracts official government tracking numbers and produces tamper-evident SHA-256 cryptographic audit receipts with downloadable PDF export.
+
+5. **Official Sample Documents for Judges**:
+   - Includes real Playwright-generated academic marksheets and statutory income certificates in `/sample_documents/` and `/public/samples/`.
+   - Allows judges to test real end-to-end PDF drag-and-drop extraction with 100% sufficiency scores.
+
+6. **Production Containerization**:
+   - Single-container multi-stage `Dockerfile` serving both the React Frontend Cockpit and FastAPI Backend with Playwright headless Chromium on a single port for zero-friction cloud deployment (Google Cloud Run / Render / Railway).
 
 ---
 
