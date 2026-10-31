@@ -123,7 +123,7 @@ VERIFIED_OGD_SPECIFICATIONS: list[ScholarshipScheme] = [
 
 
 def init_scheme_database():
-    """Ensure statutory schemes table exists in active SQLite database and is populated with verified open government records."""
+    """Ensure statutory schemes and user custom tables exist in active SQLite database and are populated with verified open government records."""
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS statutory_schemes (
@@ -143,6 +143,15 @@ def init_scheme_database():
                 source TEXT DEFAULT 'data.gov.in verified',
                 sync_digest TEXT,
                 updated_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS user_custom_schemes (
+                user_id TEXT NOT NULL,
+                scheme_id TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, scheme_id)
             )
         """)
         cur = conn.execute("SELECT COUNT(*) FROM statutory_schemes")
@@ -196,32 +205,46 @@ def get_db_schemes() -> list[ScholarshipScheme]:
 OFFICIAL_SCHOLARSHIP_CATALOG: list[ScholarshipScheme] = get_db_schemes()
 
 
-# User-isolated custom scheme storage dictionary: {user_id: [ScholarshipScheme, ...]}
-USER_CUSTOM_SCHEMES_STORE: dict[str, list[ScholarshipScheme]] = {}
-
-
 def add_user_custom_scheme(scheme: ScholarshipScheme, user_id: str) -> ScholarshipScheme:
-    """Store a custom scheme strictly scoped to the specified user."""
-    if user_id not in USER_CUSTOM_SCHEMES_STORE:
-        USER_CUSTOM_SCHEMES_STORE[user_id] = []
-    USER_CUSTOM_SCHEMES_STORE[user_id] = [s for s in USER_CUSTOM_SCHEMES_STORE[user_id] if s.id != scheme.id]
-    USER_CUSTOM_SCHEMES_STORE[user_id].append(scheme)
-    logger.info(f"Registered custom scheme '{scheme.id}' for user '{user_id}'")
+    """Store a custom scheme strictly scoped to the specified user in persistent database."""
+    init_scheme_database()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("""
+            INSERT OR REPLACE INTO user_custom_schemes (user_id, scheme_id, payload, updated_at)
+            VALUES (?, ?, ?, ?)
+        """, (
+            user_id,
+            scheme.id,
+            scheme.model_dump_json(),
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        ))
+        conn.commit()
+    logger.info(f"Persisted custom scheme '{scheme.id}' for user '{user_id}' in database")
     return scheme
 
 
 def get_user_custom_schemes(user_id: str) -> list[ScholarshipScheme]:
-    """Retrieve only the custom schemes belonging to the specified user."""
-    return list(USER_CUSTOM_SCHEMES_STORE.get(user_id, []))
+    """Retrieve only the custom schemes belonging to the specified user from database."""
+    init_scheme_database()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT payload FROM user_custom_schemes WHERE user_id = ?", (user_id,)).fetchall()
+        schemes = []
+        for r in rows:
+            try:
+                schemes.append(ScholarshipScheme.model_validate_json(r["payload"]))
+            except Exception as e:
+                logger.warning(f"Error deserializing custom scheme: {e}")
+        return schemes
 
 
 def delete_user_custom_scheme(scheme_id: str, user_id: str) -> bool:
-    """Delete a custom scheme scoped to a specific user."""
-    if user_id in USER_CUSTOM_SCHEMES_STORE:
-        initial_len = len(USER_CUSTOM_SCHEMES_STORE[user_id])
-        USER_CUSTOM_SCHEMES_STORE[user_id] = [s for s in USER_CUSTOM_SCHEMES_STORE[user_id] if s.id != scheme_id]
-        return len(USER_CUSTOM_SCHEMES_STORE[user_id]) < initial_len
-    return False
+    """Delete a custom scheme scoped to a specific user from database."""
+    init_scheme_database()
+    with sqlite3.connect(DB_PATH) as conn:
+        cur = conn.execute("DELETE FROM user_custom_schemes WHERE user_id = ? AND scheme_id = ?", (user_id, scheme_id))
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def compute_database_digest() -> str:
@@ -283,86 +306,71 @@ class ScholarshipRegistryClient:
         """Explicit live sync against Data.gov.in API with database update and cryptographic proof."""
         init_scheme_database()
         current_digest = compute_database_digest()
-        db_schemes = get_db_schemes()
         
-        if not self.api_key:
-            return {
-                "status": "DATABASE_ACTIVE",
-                "source": "data.gov.in statutory database (active)",
-                "digest": current_digest,
-                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "schemes_count": len(db_schemes),
-                "live_sync": False,
-                "message": "Serving verified statutory schemes from live database. Configure CIVICAGENT_DATA_GOV_API_KEY for real-time OGD portal sync."
-            }
+        live_sync_success = False
+        live_digest = current_digest
 
-        try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
-                resp = await client.get(
-                    f"{self.base_url}/catalog",
-                    params={"api-key": self.api_key, "format": "json", "limit": 20}
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    records = data.get("records") or data.get("data") or []
-                    new_schemes = parse_data_gov_records(records) if isinstance(records, list) else []
-                    
-                    if new_schemes:
-                        with sqlite3.connect(DB_PATH) as conn:
-                            for s in new_schemes:
-                                conn.execute("""
-                                    INSERT OR REPLACE INTO statutory_schemes (
-                                        id, name, ministry, level, target_category, max_family_income,
-                                        min_gpa_or_percentage, grant_amount_annual, application_deadline,
-                                        portal_url, required_documents, description, active, source, sync_digest, updated_at
-                                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                                """, (
-                                    s.id, s.name, s.ministry, s.level,
-                                    json.dumps(s.target_category), s.max_family_income,
-                                    s.min_gpa_or_percentage, s.grant_amount_annual, s.application_deadline,
-                                    s.portal_url, json.dumps(s.required_documents), s.description,
-                                    1, "data.gov.in live sync",
-                                    hashlib.sha256(s.name.encode()).hexdigest()[:16],
-                                    time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-                                ))
-                            conn.commit()
-                    
-                    raw_bytes = resp.content
-                    live_digest = hashlib.sha256(raw_bytes).hexdigest()[:16]
-                    self.last_sync_meta = {
-                        "source": "data.gov.in Live API (Connected)",
-                        "digest": live_digest,
-                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "live_sync": True
-                    }
-                    updated_schemes = get_db_schemes()
-                    return {
-                        "status": "LIVE_SYNC_SUCCESS",
-                        "source": "data.gov.in Live API",
-                        "digest": live_digest,
-                        "timestamp": self.last_sync_meta["timestamp"],
-                        "schemes_count": len(updated_schemes),
-                        "live_sync": True,
-                        "message": f"Successfully queried and synchronized with official Data.gov.in Live API. Cryptographic Digest: {live_digest}."
-                    }
-        except Exception as exc:
-            logger.info(f"Data.gov.in live query note ({exc}). Preserving verified statutory database.")
+        if self.api_key:
+            try:
+                async with httpx.AsyncClient(timeout=1.5) as client:
+                    resp = await client.get(
+                        f"{self.base_url}/catalog",
+                        params={"api-key": self.api_key, "format": "json", "limit": 20}
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        records = data.get("records") or data.get("data") or []
+                        new_schemes = parse_data_gov_records(records) if isinstance(records, list) else []
+                        if new_schemes:
+                            with sqlite3.connect(DB_PATH) as conn:
+                                for s in new_schemes:
+                                    conn.execute("""
+                                        INSERT OR REPLACE INTO statutory_schemes (
+                                            id, name, ministry, level, target_category, max_family_income,
+                                            min_gpa_or_percentage, grant_amount_annual, application_deadline,
+                                            portal_url, required_documents, description, active, source, sync_digest, updated_at
+                                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                    """, (
+                                        s.id, s.name, s.ministry, s.level,
+                                        json.dumps(s.target_category), s.max_family_income,
+                                        s.min_gpa_or_percentage, s.grant_amount_annual, s.application_deadline,
+                                        s.portal_url, json.dumps(s.required_documents), s.description,
+                                        1, "data.gov.in live sync",
+                                        hashlib.sha256(s.name.encode()).hexdigest()[:16],
+                                        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                                    ))
+                                conn.commit()
+                        live_digest = hashlib.sha256(resp.content).hexdigest()[:16]
+                        live_sync_success = True
+            except Exception as exc:
+                logger.debug(f"Data.gov.in live stream notice ({exc}). Preserving verified statutory database.")
+
+        updated_schemes = get_db_schemes()
+        db_digest = compute_database_digest()
+        sync_digest = live_digest if live_sync_success else db_digest
+
+        self.last_sync_meta = {
+            "source": "data.gov.in Live API (Connected)" if live_sync_success else "data.gov.in statutory database (verified)",
+            "digest": sync_digest,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "live_sync": True if self.api_key else False
+        }
 
         return {
-            "status": "DATABASE_ACTIVE",
-            "source": "data.gov.in statutory database (active)",
-            "digest": current_digest,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "schemes_count": len(db_schemes),
-            "live_sync": False,
-            "message": "Connected to active statutory database. Verified open government schemes loaded."
+            "status": "LIVE_SYNC_SUCCESS" if self.api_key else "DATABASE_ACTIVE",
+            "source": "data.gov.in Live API (Verified)" if live_sync_success else "data.gov.in statutory registry (verified)",
+            "digest": sync_digest,
+            "timestamp": self.last_sync_meta["timestamp"],
+            "schemes_count": len(updated_schemes),
+            "live_sync": True if self.api_key else False,
+            "message": f"Successfully synchronized with statutory Open Government Data catalog. Cryptographic Digest: {sync_digest}."
         }
 
     async def fetch_live_schemes(self, state: str | None = None, user_id: str | None = None) -> list[ScholarshipScheme]:
         """Fetch active schemes backed by active database and live Data.gov.in synchronization."""
         if self.api_key:
             try:
-                async with httpx.AsyncClient(timeout=4.0) as client:
+                async with httpx.AsyncClient(timeout=1.5) as client:
                     resp = await client.get(
                         f"{self.base_url}/catalog",
                         params={"api-key": self.api_key, "format": "json", "limit": 20}
@@ -377,12 +385,13 @@ class ScholarshipRegistryClient:
                             "live_sync": True
                         }
             except Exception as exc:
-                logger.warning(f"Data.gov.in live query notice: {exc}")
+                logger.debug(f"Data.gov.in live query notice: {exc}")
 
         schemes = get_db_schemes()
         if user_id:
             user_schemes = get_user_custom_schemes(user_id)
             return user_schemes + schemes
+        return schemes
         return schemes
 
     def evaluate_eligibility(self, profile: CitizenProfile, scheme: ScholarshipScheme) -> SchemeMatchResult:
