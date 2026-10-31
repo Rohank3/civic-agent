@@ -23,15 +23,23 @@ FIELD_SYNONYMS = {
     "first_name": ["first name", "given name", "forename"],
     "last_name": ["last name", "surname", "family name"],
     "date_of_birth": ["date of birth", "dob", "birth date", "birthdate", "born"],
-    "national_id": ["social security", "ssn", "national id", "state id", "aadhaar", "id number", "identification number", "tin"],
+    "national_id": ["social security", "ssn", "national id", "state id", "aadhaar", "id number", "identification number", "tin", "identity number"],
     "email": ["email", "email address", "e-mail"],
     "phone": ["phone", "phone number", "mobile", "mobile number", "telephone", "contact number"],
     "address_street": ["street", "address", "address line 1", "mailing address", "residential address"],
     "address_city": ["city", "town", "municipality"],
     "address_state": ["state", "province", "region"],
     "address_zip": ["zip", "zip code", "postal code", "pincode", "pin code"],
-    "income_annual": ["annual income", "gross income", "household income", "yearly income", "total income"],
-    "household_size": ["household size", "family size", "number of dependents", "household members"]
+    "income_annual": ["annual income", "gross income", "household income", "yearly income", "total income", "family income"],
+    "household_size": ["household size", "family size", "number of dependents", "household members"],
+    "category": ["category", "caste", "community", "social category", "reservation class"],
+    "gender": ["gender", "sex"],
+    "gpa": ["gpa", "cgpa", "grade point", "grade point average"],
+    "percentage": ["percentage", "marks", "aggregate", "score", "percent"],
+    "major": ["major", "branch", "department", "course", "stream", "specialization", "program", "degree"],
+    "institution": ["institution", "college", "university", "institute", "school", "campus"],
+    "roll_number": ["roll number", "roll no", "registration number", "reg no", "hall ticket", "student id", "enrolment number", "enrollment"],
+    "certificate_number": ["certificate number", "income cert", "cert no", "revenue cert", "affidavit number"]
 }
 
 
@@ -184,6 +192,14 @@ class AutonomousBureaucracyAgent:
             "address_zip": self.profile.address_zip,
             "income_annual": str(self.profile.income_annual) if self.profile.income_annual is not None else "",
             "household_size": str(self.profile.household_size) if self.profile.household_size is not None else "",
+            "category": getattr(self.profile, "category", "") or str(self.profile.attributes.get("category", "GENERAL")),
+            "gender": str(self.profile.attributes.get("gender", "")),
+            "gpa": str(self.profile.attributes.get("gpa", "")),
+            "percentage": str(self.profile.attributes.get("percentage", "")),
+            "major": str(self.profile.attributes.get("major", "")),
+            "institution": str(self.profile.attributes.get("institution", "")),
+            "roll_number": str(self.profile.attributes.get("roll_number", "")),
+            "certificate_number": str(self.profile.attributes.get("certificate_number", "")),
         }
         if key in mapping:
             return mapping[key]
@@ -271,6 +287,8 @@ class AutonomousBureaucracyAgent:
 
         filled_count = 0
         newly_learned = {}
+        handled_selectors = set()
+        handled_keys = set()
 
         # Gemini 3.5 Flash ReAct Reasoning pass on live execution
         if os.environ.get("TESTING") != "1" and not os.environ.get("PYTEST_CURRENT_TEST"):
@@ -297,6 +315,10 @@ class AutonomousBureaucracyAgent:
                                     if current_val != str(val):
                                         await self._type_humanlike(loc, str(val))
                                         filled_count += 1
+                                    handled_selectors.add(sel.lower())
+                                    matched_k = self._match_field_key(sel)
+                                    if matched_k:
+                                        handled_keys.add(matched_k)
                                 elif atype == "select" and val:
                                     try:
                                         await loc.select_option(label=str(val), timeout=400)
@@ -307,6 +329,10 @@ class AutonomousBureaucracyAgent:
                                             filled_count += 1
                                         except Exception:
                                             pass
+                                    handled_selectors.add(sel.lower())
+                                    matched_k = self._match_field_key(sel)
+                                    if matched_k:
+                                        handled_keys.add(matched_k)
                                 elif atype in ("check", "click", "checkbox"):
                                     try:
                                         if await loc.is_checked() is False:
@@ -315,8 +341,16 @@ class AutonomousBureaucracyAgent:
                                     except Exception:
                                         await loc.click(timeout=400)
                                         filled_count += 1
+                                    handled_selectors.add(sel.lower())
                         except Exception as act_err:
                             logger.debug(f"Gemini action execution notice on {sel}: {act_err}")
+
+                    if handled_selectors:
+                        await self.emit_telemetry(
+                            action="GEMINI_REACT_DOM_SATISFIED",
+                            details=f"Step {self.current_step}: Gemini ReAct planner populated {len(handled_selectors)} fields with zero heuristic collisions.",
+                            stage="POPULATING_FORM"
+                        )
             except Exception as e:
                 logger.debug(f"Gemini ReAct execution pass notice: {e}")
 
@@ -324,6 +358,8 @@ class AutonomousBureaucracyAgent:
         if self.memory:
             learned = await self.memory.get_learned_selectors(self.request.portal_url, self.request.service_id)
             for field_key, selector in learned.items():
+                if selector.lower() in handled_selectors or field_key in handled_keys:
+                    continue
                 try:
                     loc = self.page.locator(selector).first
                     if await loc.is_visible(timeout=100):
@@ -359,6 +395,11 @@ class AutonomousBureaucracyAgent:
                     };
                 }""")
 
+                ctrl_id = f"#{info['id']}".lower() if info["id"] else ""
+                ctrl_name = f"[name='{info['name']}']".lower() if info["name"] else ""
+                if (ctrl_id and ctrl_id in handled_selectors) or (ctrl_name and ctrl_name in handled_selectors):
+                    continue
+
                 tag = info["tag"]
                 ctype = info["type"]
                 label = info["label"]
@@ -367,7 +408,7 @@ class AutonomousBureaucracyAgent:
                     continue
 
                 matched_key = self._match_field_key(label)
-                if not matched_key:
+                if not matched_key or matched_key in handled_keys:
                     continue
 
                 # Record learned selector if element has reliable identifier

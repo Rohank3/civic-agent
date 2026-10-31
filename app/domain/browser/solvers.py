@@ -1,8 +1,11 @@
 import asyncio
 import base64
+import json
 import logging
+import os
 import re
 from typing import Any
+import httpx
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
 
 logger = logging.getLogger(__name__)
@@ -11,10 +14,11 @@ logger = logging.getLogger(__name__)
 class ObstacleSolver:
     """Automated and assisted solver for common bureaucracy portal obstacles."""
 
-    def __init__(self, redis=None, vision_client=None, model=None):
+    def __init__(self, redis=None, vision_client=None, model=None, api_key: str | None = None):
         self.redis = redis
         self.vision_client = vision_client
-        self.model = model
+        self.api_key = api_key or os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
 
     async def dismiss_overlays_and_modals(self, page: Page) -> bool:
         """Dismiss cookie banners, announcement dialogs, and alert overlays."""
@@ -58,40 +62,64 @@ class ObstacleSolver:
         return count
 
     async def solve_text_or_math_captcha(self, page: Page, img_locator_selector: str, input_selector: str) -> bool:
-        """Solve visual/text CAPTCHAs using the LLM Vision model."""
-        if not self.vision_client or not self.model:
-            return False
+        """Solve visual/text CAPTCHAs using Google Gemini multimodal vision with fallback."""
         try:
             img_elem = page.locator(img_locator_selector).first
             if not await img_elem.is_visible(timeout=1000):
                 return False
             screenshot_bytes = await img_elem.screenshot()
-            b64_img = base64.b64encode(screenshot_bytes).decode()
+            b64_img = base64.b64encode(screenshot_bytes).decode("ascii")
 
-            response = await self.vision_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Extract the characters or solve the simple math puzzle shown in this CAPTCHA image. Reply ONLY with the final alphanumeric solution string, nothing else."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{b64_img}"}
-                            }
+            if self.api_key:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+                prompt = (
+                    "Extract the characters or solve the simple math puzzle shown in this CAPTCHA image. "
+                    "Reply ONLY with the final alphanumeric solution string, nothing else."
+                )
+                payload = {
+                    "contents": [{
+                        "parts": [
+                            {"text": prompt},
+                            {"inlineData": {"mimeType": "image/png", "data": b64_img}}
                         ]
-                    }
-                ],
-                max_tokens=20,
-                temperature=0.0
-            )
-            solution = response.choices[0].message.content.strip()
-            if solution:
-                await page.locator(input_selector).fill(solution)
-                return True
+                    }],
+                    "generationConfig": {"temperature": 0.0}
+                }
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        solution = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        clean_solution = re.sub(r"[^A-Za-z0-9]", "", solution)
+                        if clean_solution:
+                            await page.locator(input_selector).fill(clean_solution)
+                            logger.info(f"Solved CAPTCHA via Gemini Vision: {clean_solution}")
+                            return True
+
+            if self.vision_client and hasattr(self.vision_client, "chat"):
+                response = await self.vision_client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": "Extract the characters or solve the simple math puzzle shown in this CAPTCHA image. Reply ONLY with the final alphanumeric solution string, nothing else."
+                                },
+                                {
+                                    "type": "image_url",
+                                    "image_url": {"url": f"data:image/png;base64,{b64_img}"}
+                                }
+                            ]
+                        }
+                    ],
+                    max_tokens=20,
+                    temperature=0.0
+                )
+                solution = response.choices[0].message.content.strip()
+                if solution:
+                    await page.locator(input_selector).fill(solution)
+                    return True
         except Exception as e:
             logger.warning(f"CAPTCHA solver error: {e}")
         return False
