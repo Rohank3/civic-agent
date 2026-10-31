@@ -15,6 +15,7 @@ from app.domain.citizen.schemas import CitizenProfile, ServiceRequest, TrackingR
 from app.domain.browser.solvers import ObstacleSolver
 from app.domain.browser.memory import PortalMemory
 from app.domain.browser.vision_fallback import VisionLocator
+from app.core.gemini import gemini_post_async
 
 logger = logging.getLogger(__name__)
 
@@ -796,29 +797,26 @@ class AutonomousBureaucracyAgent:
                 "'corrected_value' (string or boolean), "
                 "'reasoning' (one sentence explanation)."
             )
-            client = await self._get_client()
-            resp = await client.post(
-                url,
-                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                json={
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "responseMimeType": "application/json",
-                        "responseSchema": {
-                            "type": "object",
-                            "properties": {
-                                "target_field": {"type": "string"},
-                                "action_type": {"type": "string", "enum": ["fill", "select", "check"]},
-                                "selector": {"type": "string"},
-                                "corrected_value": {"type": "string"},
-                                "reasoning": {"type": "string"}
-                            },
-                            "required": ["target_field", "action_type", "corrected_value", "reasoning"]
-                        }
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "object",
+                        "properties": {
+                            "target_field": {"type": "string"},
+                            "action_type": {"type": "string", "enum": ["fill", "select", "check"]},
+                            "selector": {"type": "string"},
+                            "corrected_value": {"type": "string"},
+                            "reasoning": {"type": "string"}
+                        },
+                        "required": ["target_field", "action_type", "corrected_value", "reasoning"]
                     }
                 }
-            )
-            if resp.status_code == 200:
+            }
+            client = await self._get_client()
+            resp = await gemini_post_async(payload, client=client)
+            if resp and resp.status_code == 200:
                 data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
                 field = data.get("target_field", "").lower()
                 action_type = data.get("action_type", "fill")
@@ -954,11 +952,11 @@ class AutonomousBureaucracyAgent:
                 "income_certificate_number": attrs.get("certificate_number"),
             }
 
-            recent_history = self.trajectory[-3:] if hasattr(self, "trajectory") else []
+            recent_history = self.trajectory[-5:] if hasattr(self, "trajectory") else []
             prompt = (
                 "You are an autonomous AI bureaucracy execution agent helping a citizen apply for a statutory scholarship. "
                 f"Applicant Verified Profile: {json.dumps(profile_summary)}. "
-                f"Recent Action Trajectory: {json.dumps(recent_history)}. "
+                f"Multi-Step Action Trajectory: {json.dumps(recent_history)}. "
                 f"Interactive Elements on page: {json.dumps(elements)}. "
                 "Analyze this form milestone and determine the required actions to complete this step and advance. "
                 "Map each relevant form field to the corresponding verified applicant attribute. "
@@ -998,15 +996,18 @@ class AutonomousBureaucracyAgent:
             }
 
             client = await self._get_client()
-            resp = await client.post(
-                url,
-                headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                json=payload
-            )
-            if resp.status_code == 200:
+            resp = await gemini_post_async(payload, client=client)
+            if resp and resp.status_code == 200:
                 raw_data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
                 actions = raw_data.get("actions", [])
                 if actions:
+                    self.trajectory.append({
+                        "step": self.current_step,
+                        "actions": [
+                            {"action": a.get("action"), "selector": a.get("selector"), "reason": a.get("reason")}
+                            for a in actions[:5]
+                        ]
+                    })
                     await self.emit_telemetry(
                         action="GEMINI_REACT_PLAN_FORMULATED",
                         details=f"Gemini Flash planned {len(actions)} actions for Step {self.current_step}: {', '.join(a.get('reason', '') for a in actions[:3])}",
@@ -1031,28 +1032,17 @@ class AutonomousBureaucracyAgent:
         return False
 
     async def self_reflect_and_verify(self) -> dict[str, Any]:
-        """Audit all interactive DOM inputs and perform LLM-driven semantic verification against statutory rules."""
-        controls = await self.page.locator(
-            "input:not([type=hidden]), textarea, select, [contenteditable=true]"
-        ).evaluate_all("""els => els.map(el => ({
-            id: el.name || el.id || el.getAttribute('aria-label') || '',
-            type: el.type || el.tagName.toLowerCase(),
-            value: el.value ?? el.textContent,
-            checked: el.checked,
-            selected: el.selectedOptions && [...el.selectedOptions].map(o => o.value || o.text)
-        }))""")
+        """Audit all interactive DOM inputs and perform semantic verification against statutory rules dynamically."""
+        from app.domain.scholarships.subagents.audit_subagent import SelfReflectionAuditSubagent
+        snapshot = await SelfReflectionAuditSubagent.audit_populated_form(
+            page=self.page,
+            request=self.request
+        )
 
         api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
         model = os.getenv("CIVICAGENT_MODEL") or "gemini-flash-lite-latest"
-        audit_findings = [
-            f"Applicant full name verified as '{self.profile.full_name}'",
-            f"Annual household income ₹{self.profile.income_annual:,.0f} verified under statutory grant ceiling",
-            f"State domicile '{self.profile.address_state}' confirmed against scheme jurisdiction",
-            "Statutory declaration and anti-perjury certifications satisfied"
-        ]
-        audit_score = 0.98
 
-        # If Gemini API key is configured, perform live multimodal vision + semantic audit
+        # If Gemini API key is configured, augment with live multimodal vision + semantic audit
         if api_key:
             try:
                 screenshot_bytes = await self.page.screenshot(type="jpeg", quality=60)
@@ -1063,9 +1053,8 @@ class AutonomousBureaucracyAgent:
                     f"Profile: Name={self.profile.full_name}, DOB={self.profile.date_of_birth}, Income={self.profile.income_annual}, Domicile={self.profile.address_state}.\n"
                     "Verify if the populated inputs are legally sufficient and accurately placed. "
                     "Return strictly valid JSON: "
-                    '{"verified": true, "match_score": 0.98, "findings": ["finding 1", "finding 2"]}'
+                    '{"verified": true, "match_score": 0.95, "findings": ["finding 1", "finding 2"]}'
                 )
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
                 payload = {
                     "contents": [{
                         "parts": [
@@ -1076,38 +1065,22 @@ class AutonomousBureaucracyAgent:
                     "generationConfig": {"responseMimeType": "application/json"}
                 }
                 client = await self._get_client()
-                resp = await client.post(
-                    url,
-                    headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-                    json=payload
-                )
-                if resp.status_code == 200:
+                resp = await gemini_post_async(payload, client=client)
+                if resp and resp.status_code == 200:
                     raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                     data = json.loads(raw)
-                    audit_findings = data.get("findings", audit_findings)
-                    audit_score = float(data.get("match_score", 0.98))
+                    gemini_findings = data.get("findings")
+                    if gemini_findings and isinstance(gemini_findings, list):
+                        snapshot["audit_findings"] = gemini_findings + snapshot["audit_findings"]
+                    if "match_score" in data:
+                        snapshot["audit_score"] = float(data["match_score"])
             except Exception as e:
                 logger.debug(f"Gemini live self-reflection fallback: {e}")
 
-        snapshot = {
-            "service_id": self.request.service_id,
-            "citizen_name": self.profile.full_name,
-            "national_id": self.profile.national_id,
-            "page_url": self.page.url,
-            "controls": controls,
-            "audit_score": audit_score,
-            "audit_findings": audit_findings,
-            "verified_fields": {
-                "name": self.profile.full_name,
-                "email": self.profile.email,
-                "national_id": self.profile.national_id,
-                "income": self.profile.income_annual,
-                "domicile": self.profile.address_state
-            }
-        }
+        top_finding = snapshot["audit_findings"][0] if snapshot["audit_findings"] else "Statutory verification satisfied"
         await self.emit_telemetry(
             action="SELF_REFLECTION_VERIFIED",
-            details=f"AI Audit Complete: {audit_findings[0]} • Score: {audit_score * 100:.0f}% confidence",
+            details=f"AI Audit Complete: {top_finding} • Score: {snapshot['audit_score'] * 100:.0f}% confidence",
             stage="SELF_REFLECTION"
         )
         return snapshot
@@ -1136,53 +1109,19 @@ class AutonomousBureaucracyAgent:
         raise RuntimeError("Submit button not found on final portal page")
 
     async def extract_tracking_receipt(self, case_id: str) -> dict[str, Any]:
-        """Extract tracking/confirmation reference, full-page screenshot, and receipt details."""
-        receipt_text = ""
-        try:
-            elem = self.page.locator(self.COMBINED_SPECIFIC_TRACKING).first
-            if await elem.is_visible():
-                txt = (await elem.inner_text()).strip()
-                if txt:
-                    receipt_text = txt
-        except Exception:
-            pass
-
-        if not receipt_text:
-            try:
-                elem = self.page.locator(self.COMBINED_BROAD_TRACKING).first
-                if await elem.is_visible():
-                    txt = (await elem.inner_text()).strip()
-                    if txt:
-                        receipt_text = txt
-            except Exception:
-                pass
-
-        if receipt_text:
-            # If broad element was matched, extract the alphanumeric tracking identifier
-            match = re.search(r"(?:tracking|confirmation|reference|application)?\s*(?:#|id|number)?\s*[:\-]?\s*([A-Z0-9\-_]{6,35})", receipt_text, re.I)
-            if match and match.group(1):
-                receipt_text = match.group(1).strip()
-        else:
-            body_text = await self.page.locator("body").inner_text()
-            match = re.search(r"(?:tracking|confirmation|reference|application)\s*(?:#|id|number)?\s*[:\-]?\s*([A-Z0-9\-_]{6,35})", body_text, re.I)
-            if match:
-                receipt_text = match.group(1).strip()
-            else:
-                receipt_text = f"ACK-{case_id[:8].upper()}"
-
-        screenshot_bytes = await self.page.screenshot(full_page=True)
-        page_html = await self.page.content()
+        """Extract tracking/confirmation reference, full-page screenshot, and receipt details using ReceiptVerificationSubagent."""
+        from app.domain.scholarships.subagents.receipt_subagent import ReceiptVerificationSubagent
+        receipt_info = await ReceiptVerificationSubagent.extract_receipt(
+            page=self.page,
+            case_id=case_id,
+            applicant_name=self.profile.full_name
+        )
 
         await self.emit_telemetry(
             action="RECEIPT_EXTRACTED",
-            details=f"Application confirmed! Government Tracking #{receipt_text}",
+            details=f"Application confirmed! Government Tracking #{receipt_info['tracking_number']}",
             stage="SUBMITTED",
             actor="GOVERNMENT_AUTHORITY"
         )
 
-        return {
-            "tracking_number": receipt_text,
-            "page_url": self.page.url,
-            "screenshot_bytes": screenshot_bytes,
-            "page_html": page_html
-        }
+        return receipt_info

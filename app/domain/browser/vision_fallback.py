@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 from pydantic import BaseModel, Field
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
+from app.core.gemini import gemini_post_async
 
 logger = logging.getLogger(__name__)
 
@@ -60,39 +61,33 @@ class VisionLocator:
         except Exception:
             pass
 
-        # 2. Multimodal Vision Fallback: only if DOM check fails and API key configured
-        if self.api_key:
-            try:
-                screenshot_bytes = await page.screenshot(type="jpeg", quality=65)
-                b64_image = base64.b64encode(screenshot_bytes).decode("ascii")
+        # 2. Multimodal Vision Fallback: only if DOM check fails
+        try:
+            screenshot_bytes = await page.screenshot(type="jpeg", quality=65)
+            b64_image = base64.b64encode(screenshot_bytes).decode("ascii")
 
-                url = f"{self.base_url}/{self.model}:generateContent"
-                prompt = (
-                    f"Look at this web page screenshot. Locate the interactive button, link, or input labeled '{label}'. "
-                    "Return ONLY valid JSON with normalized coordinates between 0 and 1: "
-                    '{"x": float, "y": float}'
-                )
-                payload = {
-                    "contents": [{
-                        "parts": [
-                            {"text": prompt},
-                            {"inlineData": {"mimeType": "image/jpeg", "data": b64_image}}
-                        ]
-                    }],
-                    "generationConfig": {"responseMimeType": "application/json"}
-                }
-                client = await self._get_client()
-                resp = await client.post(
-                    url,
-                    headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
-                    json=payload
-                )
-                if resp.status_code == 200:
-                    raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                    data = json.loads(raw)
-                    return Point(x=float(data["x"]), y=float(data["y"]))
-            except Exception as exc:
-                logger.debug(f"Gemini vision locate fallback notice: {exc}")
+            prompt = (
+                f"Look at this web page screenshot. Locate the interactive button, link, or input labeled '{label}'. "
+                "Return ONLY valid JSON with normalized coordinates between 0 and 1: "
+                '{"x": float, "y": float}'
+            )
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {"inlineData": {"mimeType": "image/jpeg", "data": b64_image}}
+                    ]
+                }],
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
+            client = await self._get_client()
+            resp = await gemini_post_async(payload, client=client)
+            if resp and resp.status_code == 200:
+                raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                data = json.loads(raw)
+                return Point(x=float(data["x"]), y=float(data["y"]))
+        except Exception as exc:
+            logger.debug(f"Gemini vision locate fallback notice: {exc}")
 
         return None
 

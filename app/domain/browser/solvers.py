@@ -7,6 +7,7 @@ import re
 from typing import Any
 import httpx
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeout
+from app.core.gemini import gemini_post_async
 
 logger = logging.getLogger(__name__)
 
@@ -130,28 +131,18 @@ class ObstacleSolver:
             screenshot_bytes = await img_elem.screenshot()
             b64_img = base64.b64encode(screenshot_bytes).decode("ascii")
 
-            if self.api_key:
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent"
-                prompt = (
-                    "Extract the characters or solve the simple math puzzle shown in this CAPTCHA image. "
-                    "Reply ONLY with the final alphanumeric solution string, nothing else."
-                )
-                payload = {
-                    "contents": [{
-                        "parts": [
-                            {"text": prompt},
-                            {"inlineData": {"mimeType": "image/png", "data": b64_img}}
-                        ]
-                    }],
-                    "generationConfig": {"temperature": 0.0}
-                }
-                client = await self._get_client()
-                resp = await client.post(
-                    url,
-                    headers={"x-goog-api-key": self.api_key, "Content-Type": "application/json"},
-                    json=payload
-                )
-                if resp.status_code == 200:
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": prompt},
+                        {"inlineData": {"mimeType": "image/png", "data": b64_img}}
+                    ]
+                }],
+                "generationConfig": {"temperature": 0.0}
+            }
+            client = await self._get_client()
+            resp = await gemini_post_async(payload, client=client)
+            if resp and resp.status_code == 200:
                     solution = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
                     clean_solution = re.sub(r"[^A-Za-z0-9]", "", solution)
                     if clean_solution:

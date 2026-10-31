@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 import httpx
 from pypdf import PdfReader
+from app.core.gemini import gemini_post_sync
 from .schemas import (
     TranscriptExtractionResult,
     IncomeCertificateExtractionResult,
@@ -158,13 +159,7 @@ def _clean_identifier(val: Any) -> str | None:
 
 
 def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult | None:
-    """Multimodal document intelligence via Gemini 3.5 Flash for academic marksheets and transcripts."""
-    api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-flash-lite-latest"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
+    """Multimodal document intelligence via Gemini 3.5 Flash for academic marksheets and transcripts, with multi-key fallback."""
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
     lower_name = file_name.lower()
     if lower_name.endswith((".jpg", ".jpeg")):
@@ -188,41 +183,38 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
             }
         })
 
-    try:
-        client = _get_http_client()
-        resp = client.post(
-            url,
-            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-            json={
-                "contents": [{"parts": parts}],
-                "generationConfig": {
-                    "responseMimeType": "application/json",
-                    "responseSchema": {
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "object",
+                "properties": {
+                    "student_name": {"type": "string"},
+                    "roll_number": {"type": "string"},
+                    "institution": {"type": "string"},
+                    "gpa": {"type": "number"},
+                    "percentage": {"type": "number"},
+                    "major": {"type": "string"},
+                    "academic_year": {"type": "string"},
+                    "bounding_boxes": {
                         "type": "object",
                         "properties": {
-                            "student_name": {"type": "string"},
-                            "roll_number": {"type": "string"},
-                            "institution": {"type": "string"},
-                            "gpa": {"type": "number"},
-                            "percentage": {"type": "number"},
-                            "major": {"type": "string"},
-                            "academic_year": {"type": "string"},
-                            "bounding_boxes": {
-                                "type": "object",
-                                "properties": {
-                                    "student_name": {"type": "array", "items": {"type": "integer"}},
-                                    "roll_number": {"type": "array", "items": {"type": "integer"}},
-                                    "gpa": {"type": "array", "items": {"type": "integer"}},
-                                    "institution": {"type": "array", "items": {"type": "integer"}}
-                                }
-                            }
-                        },
-                        "required": ["student_name"]
+                            "student_name": {"type": "array", "items": {"type": "integer"}},
+                            "roll_number": {"type": "array", "items": {"type": "integer"}},
+                            "gpa": {"type": "array", "items": {"type": "integer"}},
+                            "institution": {"type": "array", "items": {"type": "integer"}}
+                        }
                     }
-                }
+                },
+                "required": ["student_name"]
             }
-        )
-        if resp.status_code == 200:
+        }
+    }
+
+    try:
+        resp = gemini_post_sync(payload, client=_get_http_client())
+        if resp and resp.status_code == 200:
             raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
             data = json.loads(raw_json)
             gpa = data.get("gpa")
@@ -257,13 +249,7 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
 
 
 def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) -> IncomeCertificateExtractionResult | None:
-    """Multimodal document intelligence via Gemini 3.5 Flash for statutory income certificates."""
-    api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-flash-lite-latest"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
+    """Multimodal document intelligence via Gemini 3.5 Flash for statutory income certificates, with multi-key fallback."""
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
     lower_name = file_name.lower()
     if lower_name.endswith((".jpg", ".jpeg")):
@@ -287,42 +273,39 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
             }
         })
 
-    try:
-        client = _get_http_client()
-        resp = client.post(
-            url,
-            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
-            json={
-                "contents": [{"parts": parts}],
-                "generationConfig": {
-                    "responseMimeType": "application/json",
-                    "responseSchema": {
+    payload = {
+        "contents": [{"parts": parts}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+                "type": "object",
+                "properties": {
+                    "certificate_number": {"type": "string"},
+                    "applicant_name": {"type": "string"},
+                    "parent_or_guardian_name": {"type": "string"},
+                    "annual_income": {"type": "number"},
+                    "issuing_authority": {"type": "string"},
+                    "state": {"type": "string"},
+                    "district": {"type": "string"},
+                    "issue_date": {"type": "string"},
+                    "bounding_boxes": {
                         "type": "object",
                         "properties": {
-                            "certificate_number": {"type": "string"},
-                            "applicant_name": {"type": "string"},
-                            "parent_or_guardian_name": {"type": "string"},
-                            "annual_income": {"type": "number"},
-                            "issuing_authority": {"type": "string"},
-                            "state": {"type": "string"},
-                            "district": {"type": "string"},
-                            "issue_date": {"type": "string"},
-                            "bounding_boxes": {
-                                "type": "object",
-                                "properties": {
-                                    "applicant_name": {"type": "array", "items": {"type": "integer"}},
-                                    "certificate_number": {"type": "array", "items": {"type": "integer"}},
-                                    "annual_income": {"type": "array", "items": {"type": "integer"}},
-                                    "issuing_authority": {"type": "array", "items": {"type": "integer"}}
-                                }
-                            }
-                        },
-                        "required": ["certificate_number", "annual_income"]
+                            "applicant_name": {"type": "array", "items": {"type": "integer"}},
+                            "certificate_number": {"type": "array", "items": {"type": "integer"}},
+                            "annual_income": {"type": "array", "items": {"type": "integer"}},
+                            "issuing_authority": {"type": "array", "items": {"type": "integer"}}
+                        }
                     }
-                }
+                },
+                "required": ["certificate_number", "annual_income"]
             }
-        )
-        if resp.status_code == 200:
+        }
+    }
+
+    try:
+        resp = gemini_post_sync(payload, client=_get_http_client())
+        if resp and resp.status_code == 200:
             raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
             data = json.loads(raw_json)
             income = data.get("annual_income")
@@ -484,6 +467,12 @@ def extract_transcript_data(
             gemini_result.institution = institution
         elif gemini_result.institution:
             gemini_result.institution = _clean_field_str(gemini_result.institution)
+        if not gemini_result.bounding_boxes:
+            gemini_result.bounding_boxes = boxes
+        else:
+            for k, v in boxes.items():
+                if k not in gemini_result.bounding_boxes or not gemini_result.bounding_boxes[k]:
+                    gemini_result.bounding_boxes[k] = v
         return gemini_result
 
     return TranscriptExtractionResult(
@@ -613,6 +602,12 @@ def extract_income_certificate_data(
             gemini_result.issuing_authority = authority
         elif gemini_result.issuing_authority:
             gemini_result.issuing_authority = _clean_field_str(gemini_result.issuing_authority)
+        if not gemini_result.bounding_boxes:
+            gemini_result.bounding_boxes = boxes
+        else:
+            for k, v in boxes.items():
+                if k not in gemini_result.bounding_boxes or not gemini_result.bounding_boxes[k]:
+                    gemini_result.bounding_boxes[k] = v
         return gemini_result
 
     return IncomeCertificateExtractionResult(
