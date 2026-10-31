@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 from playwright.async_api import async_playwright
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent.parent / "sample_documents"
-FRONTEND_SAMPLES = Path(__file__).resolve().parent.parent.parent / "frontend" / "public" / "samples"
+OUTPUT_DIR = Path(__file__).resolve().parent.parent / "sample_documents"
+FRONTEND_SAMPLES = Path(__file__).resolve().parent.parent / "frontend" / "public" / "samples"
 
 AARAV_TRANSCRIPT_HTML = """
 <!DOCTYPE html>
