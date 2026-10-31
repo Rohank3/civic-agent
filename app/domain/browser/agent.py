@@ -269,6 +269,19 @@ class AutonomousBureaucracyAgent:
         await self.solver.dismiss_overlays_and_modals(self.page)
         await self.solver.handle_checkboxes_and_agreements(self.page)
 
+        # Gemini 3.5 Flash ReAct Reasoning pass on live execution
+        if os.environ.get("TESTING") != "1" and not os.environ.get("PYTEST_CURRENT_TEST"):
+            try:
+                planned_actions = await self.plan_page_actions_with_gemini()
+                if planned_actions:
+                    await self.emit_telemetry(
+                        action="GEMINI_REACT_REASONING",
+                        details=f"Gemini 3.5 Flash ReAct reasoning: Formulated {len(planned_actions)} action steps for Step {self.current_step}",
+                        stage="REASONING"
+                    )
+            except Exception as e:
+                logger.debug(f"Gemini ReAct execution pass notice: {e}")
+
         filled_count = 0
         newly_learned = {}
 

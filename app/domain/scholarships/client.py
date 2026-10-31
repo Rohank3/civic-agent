@@ -13,101 +13,19 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "civicagent.db")
 
-# Official statutory scholarship records derived from Data.gov.in / National Scholarship Portal open catalog
-OFFICIAL_SCHOLARSHIP_CATALOG: list[ScholarshipScheme] = [
-    ScholarshipScheme(
-        id="central_sector_college",
-        name="Central Sector Scheme of Scholarships for College & University Students",
-        ministry="Ministry of Education (Department of Higher Education)",
-        level="undergraduate",
-        target_category=["ALL", "GENERAL", "OBC", "SC", "ST", "EWS"],
-        max_family_income=450000.0,
-        min_gpa_or_percentage=75.0,
-        grant_amount_annual=20000.0,
-        application_deadline="2026-12-31",
-        portal_url="http://localhost:8000/portal/scholarship",
-        required_documents=[
-            "Official Grade Sheet / Transcript (PDF)",
-            "Income Certificate issued by Competent Authority (PDF)",
-            "Bank Passbook Proof"
-        ],
-        description="Merit-cum-means scholarship awarded to students in top 20th percentile of successful candidates in 10+2 board examinations pursuing regular graduate programs."
-    ),
-    ScholarshipScheme(
-        id="post_matric_sc_st",
-        name="Centrally Sponsored Post-Matric Scholarship for SC/ST Candidates",
-        ministry="Ministry of Social Justice and Empowerment",
-        level="all",
-        target_category=["SC", "ST"],
-        max_family_income=250000.0,
-        min_gpa_or_percentage=50.0,
-        grant_amount_annual=35000.0,
-        application_deadline="2026-11-30",
-        portal_url="http://localhost:8000/portal/scholarship",
-        required_documents=[
-            "Caste Certificate (PDF)",
-            "Income Certificate (PDF)",
-            "Bonafide Student Certificate (PDF)",
-            "Previous Year Academic Marksheet"
-        ],
-        description="Comprehensive maintenance allowance and fee reimbursement for SC/ST students pursuing post-matriculation or post-secondary courses."
-    ),
-    ScholarshipScheme(
-        id="aicte_pragati_girls",
-        name="AICTE Pragati Scholarship Scheme for Girl Students (Technical Degree)",
-        ministry="All India Council for Technical Education (AICTE)",
-        level="undergraduate",
-        target_category=["FEMALE"],
-        max_family_income=800000.0,
-        min_gpa_or_percentage=60.0,
-        grant_amount_annual=50000.0,
-        application_deadline="2026-12-15",
-        portal_url="http://localhost:8000/portal/scholarship",
-        required_documents=[
-            "College Admission Letter (PDF)",
-            "Tuition Fee Receipt",
-            "Family Income Certificate (PDF)",
-            "Class 10/12 Marksheet"
-        ],
-        description="Special scholarship grant providing ₹50,000 per annum towards college fee, stationery, books, and software for female students admitted to first-year degree programs."
-    ),
-    ScholarshipScheme(
-        id="ishan_uday_ner",
-        name="Ishan Uday Special Scholarship Scheme for North Eastern Region",
-        ministry="University Grants Commission (UGC)",
-        level="undergraduate",
-        target_category=["ALL", "NER_DOMICILE"],
-        max_family_income=450000.0,
-        min_gpa_or_percentage=60.0,
-        grant_amount_annual=64800.0,
-        application_deadline="2026-11-20",
-        portal_url="http://localhost:8000/portal/scholarship",
-        required_documents=[
-            "State Domicile Certificate (PDF)",
-            "Annual Household Income Affidavit",
-            "College Enrolment Certificate"
-        ],
-        description="10,000 fresh annual scholarships for students with permanent domicile in the North Eastern states pursuing general degree, medical, or engineering programs."
-    ),
-    ScholarshipScheme(
-        id="pm_yasasvi_obc_ebc",
-        name="PM-YASASVI Post-Matric Scholarship for OBC, EBC and DNT Students",
-        ministry="Ministry of Social Justice and Empowerment",
-        level="undergraduate",
-        target_category=["OBC", "EBC", "DNT"],
-        max_family_income=250000.0,
-        min_gpa_or_percentage=55.0,
-        grant_amount_annual=25000.0,
-        application_deadline="2026-12-31",
-        portal_url="http://localhost:8000/portal/scholarship",
-        required_documents=[
-            "Community/OBC Certificate",
-            "Income Certificate (PDF)",
-            "Academic Transcript"
-        ],
-        description="Financial assistance to OBC, Economically Backward Classes (EBC), and Denotified Nomadic Tribes (DNT) studying at post-secondary stage."
-    )
-]
+DATA_PATH = os.path.join(os.path.dirname(__file__), "data", "statutory_schemes.json")
+
+
+def load_verified_ogd_catalog() -> list[ScholarshipScheme]:
+    """Load verified open government data records from structured dataset file."""
+    if os.path.exists(DATA_PATH):
+        try:
+            with open(DATA_PATH, "r", encoding="utf-8") as f:
+                raw_list = json.load(f)
+                return [ScholarshipScheme(**item) for item in raw_list]
+        except Exception as exc:
+            logger.warning(f"Failed to load OGD dataset: {exc}")
+    return []
 
 
 def init_scheme_database():
@@ -135,7 +53,8 @@ def init_scheme_database():
         """)
         cur = conn.execute("SELECT COUNT(*) FROM statutory_schemes")
         if cur.fetchone()[0] == 0:
-            for s in OFFICIAL_SCHOLARSHIP_CATALOG:
+            verified_catalog = load_verified_ogd_catalog()
+            for s in verified_catalog:
                 conn.execute("""
                     INSERT OR REPLACE INTO statutory_schemes (
                         id, name, ministry, level, target_category, max_family_income,
@@ -178,6 +97,10 @@ def get_db_schemes() -> list[ScholarshipScheme]:
                 active=bool(r["active"])
             ))
         return result
+
+
+# Official statutory scholarship records dynamically loaded from verified database / OGD dataset
+OFFICIAL_SCHOLARSHIP_CATALOG: list[ScholarshipScheme] = get_db_schemes()
 
 
 # User-isolated custom scheme storage dictionary: {user_id: [ScholarshipScheme, ...]}
@@ -281,7 +204,7 @@ class ScholarshipRegistryClient:
             }
 
         try:
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=3.0) as client:
                 resp = await client.get(
                     f"{self.base_url}/catalog",
                     params={"api-key": self.api_key, "format": "json", "limit": 20}

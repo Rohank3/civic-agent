@@ -33,18 +33,40 @@ class DualDocumentUploadRequest(BaseModel):
     income_content: str = Field(description="Base64 encoded PDF or text of income certificate")
 
 
+def normalize_portal_url(scheme: ScholarshipScheme, base_url: str) -> ScholarshipScheme:
+    if "portal/scholarship" in scheme.portal_url:
+        new_url = f"{base_url.rstrip('/')}/portal/scholarship"
+        if scheme.portal_url != new_url:
+            return scheme.model_copy(update={"portal_url": new_url})
+    return scheme
+
+
 @router.get("/schemes/list", response_model=list[ScholarshipScheme])
 async def list_schemes(request: Request, user_id: str | None = None):
     """Retrieve all active statutory scholarship schemes, strictly including only the caller's custom schemes."""
     client = ScholarshipRegistryClient()
-    return await client.fetch_live_schemes(user_id=user_id)
+    schemes = await client.fetch_live_schemes(user_id=user_id)
+    base = str(request.base_url)
+    return [normalize_portal_url(s, base) for s in schemes]
 
 
 @router.post("/schemes/match", response_model=list[SchemeMatchResult])
 async def match_schemes(profile: CitizenProfile, request: Request, user_id: str | None = None):
     """Real-time matching engine: checks student profile against live statutory criteria and returns eligibility rankings."""
     client = ScholarshipRegistryClient()
-    return await client.match_all_schemes(profile, user_id=user_id)
+    results = await client.match_all_schemes(profile, user_id=user_id)
+    base = str(request.base_url)
+    return [
+        SchemeMatchResult(
+            scheme=normalize_portal_url(r.scheme, base),
+            is_eligible=r.is_eligible,
+            match_score=r.match_score,
+            eligible_reasons=r.eligible_reasons,
+            missing_criteria=r.missing_criteria,
+            actionable_recommendations=r.actionable_recommendations
+        )
+        for r in results
+    ]
 
 
 @router.post("/schemes/sync")
