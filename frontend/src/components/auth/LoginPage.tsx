@@ -237,10 +237,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
           <button
             type="button"
             onClick={() => { setActiveTab('credentials'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 px-1 rounded-lg text-center transition-all ${
+            className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
               activeTab === 'credentials'
                 ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
             Citizen Sign In / Up
@@ -248,10 +248,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
           <button
             type="button"
             onClick={() => { setActiveTab('digilocker'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 px-1 rounded-lg text-center transition-all ${
+            className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
               activeTab === 'digilocker'
                 ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
             MeriPehchaan SSO
@@ -259,10 +259,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
           <button
             type="button"
             onClick={() => { setActiveTab('demo'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 px-1 rounded-lg text-center transition-all ${
+            className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
               activeTab === 'demo'
                 ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
             Sandbox Personas
@@ -706,7 +706,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
             <button
               type="button"
               onClick={onContinueAsGuest}
-              className="text-[11px] text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+              className="text-[11px] text-slate-500 hover:text-slate-300 active:text-white transition-colors cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400"
             >
               Guest Preview
             </button>

@@ -135,7 +135,7 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
               type="button"
               onClick={handleCopyTelemetry}
               disabled={events.length === 0}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
               title="Copy Raw Telemetry JSON"
             >
               {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -143,7 +143,7 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors cursor-pointer"
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-400 hover:text-white transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
               title="Close Inspector"
             >
               <X className="w-4 h-4" />
@@ -209,10 +209,10 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
                 filter === f
                   ? 'bg-blue-600 text-white font-semibold'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                  : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700/80'
               }`}
             >
               {f === 'ALL' && 'All Telemetry'}
@@ -281,7 +281,7 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
           <button
             type="button"
             onClick={handleCopyTelemetry}
-            className="text-blue-400 hover:text-blue-300 font-medium transition-colors cursor-pointer"
+            className="text-blue-400 hover:text-blue-300 active:text-blue-500 font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400 rounded-sm"
           >
             Export Audit Payload
           </button>

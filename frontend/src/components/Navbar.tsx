@@ -85,7 +85,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               type="button"
               onClick={onSyncLiveData}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700/60 text-xs text-slate-300 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/80 active:bg-slate-600/80 border border-slate-700/60 text-xs text-slate-300 hover:text-white transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
               title="Click to perform live Data.gov.in API catalog sync"
             >
               <Database className={`w-3.5 h-3.5 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
@@ -99,10 +99,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onToggleInspector}
-              className={`px-3 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm ${
+              className={`px-3 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 active:scale-95 ${
                 isInspectorOpen
                   ? 'bg-indigo-600 text-white ring-2 ring-indigo-400 shadow-indigo-500/30'
-                  : 'bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300'
+                  : 'bg-indigo-500/15 hover:bg-indigo-500/25 active:bg-indigo-500/35 border border-indigo-500/30 text-indigo-300'
               }`}
               title="Toggle AI Reasoning & Execution Telemetry Inspector (Judge View)"
             >
@@ -128,7 +128,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Reset / New Session */}
           <button
             onClick={onReset}
-            className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 text-xs font-medium text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+            className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 hover:border-slate-600 text-xs font-medium text-slate-200 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
             title="Reset session and load new applicant"
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
@@ -139,7 +139,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenApplied && (
             <button
               onClick={onOpenApplied}
-              className="px-2.5 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-medium text-emerald-300 transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+              className="px-2.5 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 text-xs font-medium text-emerald-300 hover:text-emerald-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
               title="View all filed scholarship applications & receipts"
             >
               <Award className="w-3.5 h-3.5 text-emerald-400" />
@@ -153,7 +153,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={onEditProfile}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-xs text-blue-300 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/30 border border-blue-500/20 hover:border-blue-500/40 text-xs text-blue-300 hover:text-blue-200 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 title="Click to view and edit your Citizen Profile"
               >
                 <User className="w-3.5 h-3.5 text-blue-400" />
@@ -164,7 +164,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="p-1 rounded-md bg-slate-800 hover:bg-rose-500/20 border border-slate-700 hover:border-rose-500/30 text-slate-400 hover:text-rose-300 transition-all cursor-pointer"
+                  className="p-1 rounded-md bg-slate-800 hover:bg-rose-500/20 active:bg-rose-500/30 border border-slate-700 hover:border-rose-500/30 text-slate-400 hover:text-rose-300 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
                   title="Switch Citizen User / Sign Out"
                 >
                   <LogOut className="w-3.5 h-3.5" />

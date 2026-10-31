@@ -107,7 +107,7 @@ export const HitlModal: React.FC<HitlModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
           >
             <X className="w-5 h-5" />
           </button>
@@ -175,7 +175,7 @@ export const HitlModal: React.FC<HitlModalProps> = ({
               </label>
               <button
                 onClick={clearSignature}
-                className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center gap-1 hover:underline cursor-pointer"
+                className="text-[10px] text-slate-400 hover:text-slate-200 active:text-white flex items-center gap-1 hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-purple-400 rounded-sm"
               >
                 <RotateCcw className="w-3 h-3" />
                 <span>Clear</span>
@@ -205,12 +205,12 @@ export const HitlModal: React.FC<HitlModalProps> = ({
           </div>
 
           {/* Perjury Declaration Checkbox */}
-          <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-800 bg-slate-950/60 cursor-pointer select-none">
+          <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-800 bg-slate-950/60 cursor-pointer select-none hover:bg-slate-950/80 transition-colors">
             <input
               type="checkbox"
               checked={isCertified}
               onChange={(e) => setIsCertified(e.target.checked)}
-              className="mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+              className="mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 w-4 h-4 cursor-pointer"
             />
             <span className="text-[11px] text-slate-300 leading-relaxed">
               I declare under penalty of perjury that all facts and supporting credentials submitted
@@ -223,14 +223,14 @@ export const HitlModal: React.FC<HitlModalProps> = ({
         <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end gap-2.5">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors cursor-pointer"
+            className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 active:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           >
             Cancel
           </button>
           <button
             onClick={handleAuthorize}
             disabled={!isCertified || !hasSignature}
-            className="px-5 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:scale-95 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            className="px-5 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:from-purple-700 active:to-indigo-700 active:scale-95 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
           >
             <Lock className="w-3.5 h-3.5" />
             <span>Authorize & Submit Application</span>

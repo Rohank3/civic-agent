@@ -80,7 +80,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
           >
             <X className="w-5 h-5" />
           </button>
@@ -108,7 +108,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Karnataka Post-Matric E-PASS Scholarship"
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/50"
             />
           </div>
 
@@ -125,7 +125,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
                 value={portalUrl}
                 onChange={(e) => setPortalUrl(e.target.value)}
                 placeholder="https://karepass.cgg.gov.in"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-slate-100 font-mono placeholder:text-slate-500 focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-slate-100 font-mono placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/50"
               />
             </div>
             <span className="text-[10px] text-slate-400 mt-0.5 block">
@@ -142,10 +142,10 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
               <button
                 type="button"
                 onClick={() => setLoginMode('fresh_registration')}
-                className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 active:scale-95 ${
                   loginMode === 'fresh_registration'
                     ? 'bg-emerald-950/40 border-emerald-500 text-emerald-200'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
                 <div className="font-semibold text-[11px] flex items-center gap-1">
@@ -158,10 +158,10 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
               <button
                 type="button"
                 onClick={() => setLoginMode('credentials')}
-                className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
                   loginMode === 'credentials'
                     ? 'bg-blue-950/40 border-blue-500 text-blue-200'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
                 <div className="font-semibold text-[11px] flex items-center gap-1">
@@ -174,10 +174,10 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
               <button
                 type="button"
                 onClick={() => setLoginMode('sso')}
-                className={`p-2 rounded-lg border text-left transition-colors cursor-pointer ${
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400 active:scale-95 ${
                   loginMode === 'sso'
                     ? 'bg-purple-950/40 border-purple-500 text-purple-200'
-                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
                 }`}
               >
                 <div className="font-semibold text-[11px] flex items-center gap-1">
@@ -206,7 +206,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="e.g. 2024CS-1092"
-                      className="w-full bg-slate-950 border border-slate-700 rounded pl-8 pr-2 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-blue-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded pl-8 pr-2 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400/50"
                     />
                   </div>
                 </div>
@@ -219,7 +219,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full bg-slate-950 border border-slate-700 rounded pl-8 pr-2 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-blue-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded pl-8 pr-2 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400/50"
                     />
                   </div>
                 </div>
@@ -238,7 +238,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
                 type="number"
                 value={incomeCeiling}
                 onChange={(e) => setIncomeCeiling(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-medium focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/50"
               />
             </div>
             <div>
@@ -247,7 +247,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
                 type="number"
                 value={minPercentage}
                 onChange={(e) => setMinPercentage(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-medium focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-slate-100 font-medium focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/50"
               />
             </div>
             <div>
@@ -256,7 +256,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
                 type="number"
                 value={grantAmount}
                 onChange={(e) => setGrantAmount(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-emerald-400 font-bold focus:outline-none focus:border-cyan-500"
+                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-emerald-400 font-bold focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/50"
               />
             </div>
           </div>
@@ -268,7 +268,7 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
               type="text"
               value={ministry}
               onChange={(e) => setMinistry(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-cyan-500"
+              className="w-full bg-slate-950 border border-slate-700 rounded px-3 py-1.5 text-slate-100 text-xs focus:outline-none focus:border-cyan-500 focus-visible:ring-2 focus-visible:ring-cyan-400/50"
             />
           </div>
 
@@ -277,13 +277,13 @@ export const AddSchemeModal: React.FC<AddSchemeModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-semibold cursor-pointer"
+              className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 active:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold cursor-pointer active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer"
+              className="px-5 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 active:from-cyan-700 active:to-blue-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-lg shadow-cyan-500/20 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>Save & Connect Portal</span>

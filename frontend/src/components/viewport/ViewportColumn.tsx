@@ -20,7 +20,7 @@ interface ViewportColumnProps {
   currentStage: string;
   activeActor: ActorRole;
   pacingMode: string;
-  setPacingMode: (mode: any) => void;
+  setPacingMode: (mode: string) => void;
   onSkipTyping: () => void;
   screenshotBase64?: string | null;
   currentStep: number;
@@ -56,16 +56,29 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   const [viewportMode, setViewportMode] = useState<'live' | 'replay'>('live');
   const [replayStep, setReplayStep] = useState<number>(1);
   const [isReplaying, setIsReplaying] = useState<boolean>(false);
-  const lastValidScreenshotRef = React.useRef<string | null>(null);
+  const [prevScreenshot, setPrevScreenshot] = useState<string | null | undefined>(screenshotBase64);
+  const [prevIsExecuting, setPrevIsExecuting] = useState<boolean>(isExecuting);
+  const [lastValidScreenshot, setLastValidScreenshot] = useState<string | null>(screenshotBase64 || null);
 
-  if (screenshotBase64) {
-    lastValidScreenshotRef.current = screenshotBase64;
+  if (screenshotBase64 !== prevScreenshot) {
+    setPrevScreenshot(screenshotBase64);
+    if (screenshotBase64) {
+      setLastValidScreenshot(screenshotBase64);
+    }
   }
-  const displayScreenshot = screenshotBase64 || (isExecuting ? lastValidScreenshotRef.current : null);
+
+  if (isExecuting !== prevIsExecuting) {
+    setPrevIsExecuting(isExecuting);
+    if (!isExecuting) {
+      setLastValidScreenshot(null);
+    }
+  }
+
+  const displayScreenshot = screenshotBase64 || (isExecuting ? lastValidScreenshot : null);
 
   // Replay playback timer
   useEffect(() => {
-    let timer: any;
+    let timer: ReturnType<typeof setInterval> | undefined;
     if (isReplaying) {
       timer = setInterval(() => {
         setReplayStep((prev) => {
@@ -77,7 +90,9 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
         });
       }, 1600);
     }
-    return () => clearInterval(timer);
+    return () => {
+      if (timer) clearInterval(timer);
+    };
   }, [isReplaying]);
 
   const getActorTitle = () => {
@@ -106,7 +121,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   const isAwaitingIntervention = currentStage === 'AWAITING_HUMAN_INTERVENTION';
 
   return (
-    <div className="flex-1 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+    <div className="h-full flex-1 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
       {/* Top Header Bar */}
       <div className="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
@@ -132,10 +147,10 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
             <button
               type="button"
               onClick={() => setViewportMode('live')}
-              className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
                 viewportMode === 'live'
                   ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Monitor className="w-3.5 h-3.5" />
@@ -147,10 +162,10 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                 setViewportMode('replay');
                 setReplayStep(1);
               }}
-              className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 cursor-pointer ${
+              className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95 ${
                 viewportMode === 'replay'
                   ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
               }`}
             >
               <Video className="w-3.5 h-3.5" />
@@ -171,10 +186,10 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                   type="button"
                   onClick={onTogglePause}
                   disabled={!isExecuting || currentStage === 'SUBMITTED'}
-                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${
                     isPaused
-                      ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20 animate-pulse'
-                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20 animate-pulse hover:bg-amber-400'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white'
                   }`}
                   title={isPaused ? 'Resume Agent Execution' : 'Pause Agent Execution'}
                 >
@@ -189,7 +204,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                   type="button"
                   onClick={onStepAdvance}
                   disabled={!isExecuting || currentStage === 'SUBMITTED'}
-                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-95"
                   title="Advance one step in step-by-step mode"
                 >
                   <StepForward className="w-3 h-3" />
@@ -202,7 +217,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                 type="button"
                 onClick={onSkipTyping}
                 disabled={!isExecuting || currentStage === 'SUBMITTED'}
-                className="px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/60 border border-indigo-500/40 text-indigo-300 text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                className="px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/60 active:bg-indigo-600/80 border border-indigo-500/40 text-indigo-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                 title="Fast forward through typing cadence on current page"
               >
                 <SkipForward className="w-3 h-3" />
@@ -239,7 +254,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
           <button
             type="button"
             onClick={onSkipTyping}
-            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow transition-all cursor-pointer"
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-bold text-xs rounded-lg shadow transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 active:scale-95"
           >
             I Solved It, Continue
           </button>
@@ -259,7 +274,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                 <button
                   type="button"
                   onClick={() => setIsReplaying(!isReplaying)}
-                  className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-all cursor-pointer shadow-md shadow-blue-500/20 active:scale-95"
+                  className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white transition-all cursor-pointer shadow-md shadow-blue-500/20 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                   title={isReplaying ? 'Pause Playback' : 'Play Session Recording'}
                 >
                   {isReplaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
@@ -270,7 +285,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                     setIsReplaying(false);
                     setReplayStep(1);
                   }}
-                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 active:scale-95"
                   title="Rewind to Beginning"
                 >
                   <RotateCcw className="w-4 h-4" />
@@ -288,7 +303,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                 <button
                   type="button"
                   onClick={() => setViewportMode('live')}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors"
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-200 text-xs font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 active:scale-95"
                 >
                   Return to Live
                 </button>
@@ -308,12 +323,12 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                       setIsReplaying(false);
                       setReplayStep(m.step);
                     }}
-                    className={`p-2 rounded-lg text-left transition-all cursor-pointer ${
+                    className={`p-2 rounded-lg text-left transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-[0.98] ${
                       isCurrent
                         ? 'bg-blue-600/30 border border-blue-500 text-white ring-1 ring-blue-500/40'
                         : isPassed
-                        ? 'bg-emerald-950/20 border border-emerald-500/30 text-emerald-300'
-                        : 'bg-slate-900/40 border border-slate-800 text-slate-500 hover:text-slate-300'
+                        ? 'bg-emerald-950/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-950/40'
+                        : 'bg-slate-900/40 border border-slate-800 text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
                     }`}
                   >
                     <div className="flex items-center gap-1 text-[10px] font-mono font-bold">
@@ -455,7 +470,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                           href={selectedScheme?.portal_url || 'http://localhost:8000/portal/scholarship'}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11px] text-blue-400 hover:text-blue-300 underline underline-offset-2 flex items-center gap-1"
+                          className="text-[11px] text-blue-400 hover:text-blue-300 active:text-blue-500 underline underline-offset-2 flex items-center gap-1 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                         >
                           <span>Open Target Portal in Browser Tab</span>
                           <Globe className="w-3 h-3" />
@@ -476,7 +491,7 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
                             <button
                               type="button"
                               onClick={onOpenReceipt}
-                              className="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
+                              className="w-full py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                             >
                               <FileCheck className="w-3.5 h-3.5" />
                               <span>View Official Tracking Receipt</span>

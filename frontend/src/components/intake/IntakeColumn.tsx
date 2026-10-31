@@ -227,7 +227,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               <a
                 href="/samples/Official_Transcript_Eleanor_Vance.pdf"
                 download="Official_Transcript_Eleanor_Vance.pdf"
-                className="text-cyan-400 hover:text-cyan-300 underline font-medium"
+                className="text-cyan-400 hover:text-cyan-300 active:text-cyan-500 underline font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 rounded-sm"
                 title="Download sample student marksheet PDF to test live upload"
               >
                 Sample Marksheet
@@ -236,7 +236,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               <a
                 href="/samples/Statutory_Income_Certificate_Eleanor_Vance.pdf"
                 download="Statutory_Income_Certificate_Eleanor_Vance.pdf"
-                className="text-emerald-400 hover:text-emerald-300 underline font-medium"
+                className="text-emerald-400 hover:text-emerald-300 active:text-emerald-500 underline font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded-sm"
                 title="Download sample income certificate PDF to test live upload"
               >
                 Sample Income Cert
@@ -247,8 +247,16 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             {/* Academic Transcript Card */}
             <div
+              role="button"
+              tabIndex={0}
               onClick={() => transcriptInputRef.current?.click()}
-              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-blue-500 bg-slate-900/50 hover:bg-slate-900/80 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  transcriptInputRef.current?.click();
+                }
+              }}
+              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-blue-500 bg-slate-900/50 hover:bg-slate-900/80 active:bg-slate-900 flex flex-col items-center justify-center text-center cursor-pointer transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-[0.99]"
             >
               <FileText className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform mb-1.5" />
               <span className="text-xs font-medium text-slate-200">
@@ -269,8 +277,16 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
 
             {/* Income Certificate Card */}
             <div
+              role="button"
+              tabIndex={0}
               onClick={() => incomeInputRef.current?.click()}
-              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-emerald-500 bg-slate-900/50 hover:bg-slate-900/80 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  incomeInputRef.current?.click();
+                }
+              }}
+              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-emerald-500 bg-slate-900/50 hover:bg-slate-900/80 active:bg-slate-900 flex flex-col items-center justify-center text-center cursor-pointer transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 active:scale-[0.99]"
             >
               <ShieldCheck className="w-6 h-6 text-emerald-400 group-hover:scale-110 transition-transform mb-1.5" />
               <span className="text-xs font-medium text-slate-200">
@@ -361,7 +377,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                     <button
                       type="button"
                       onClick={onVerifyDigiLocker}
-                      className="w-full py-1.5 px-3 rounded bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+                      className="w-full py-1.5 px-3 rounded bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                       <span>Resolve via DigiLocker (NSSO / MeriPehchaan)</span>
@@ -398,7 +414,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               <button
                 type="button"
                 onClick={onOpenEditProfile}
-                className="px-2 py-1 rounded bg-blue-600/30 hover:bg-blue-600/60 border border-blue-500/40 text-blue-300 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                className="px-2 py-1 rounded bg-blue-600/30 hover:bg-blue-600/60 active:bg-blue-600/80 border border-blue-500/40 text-blue-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                 title="Edit Citizen Profile fields directly"
               >
                 <Edit2 className="w-3 h-3" />
@@ -407,7 +423,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               <button
                 type="button"
                 onClick={() => setShowProfileDetails(!showProfileDetails)}
-                className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700/50 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
               >
                 {showProfileDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
@@ -484,7 +500,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           <button
             type="button"
             onClick={() => setShowTestPersonas(!showTestPersonas)}
-            className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors"
+            className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
           >
             <div className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
@@ -504,7 +520,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                     key={preset.id}
                     onClick={() => handlePresetSelect(preset)}
                     disabled={isExecuting}
-                    className="p-2 rounded-lg border border-slate-800 hover:border-indigo-500/60 bg-slate-900/60 hover:bg-slate-800 text-left transition-all cursor-pointer text-[11px]"
+                    className="p-2 rounded-lg border border-slate-800 hover:border-indigo-500/60 bg-slate-900/60 hover:bg-slate-800 active:bg-slate-700/80 text-left transition-all cursor-pointer text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
                   >
                     <div className="font-semibold text-white truncate">{preset.name}</div>
                     <div className="text-[10px] text-slate-400 mt-0.5">{preset.category}</div>
@@ -527,7 +543,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                 <button
                   type="button"
                   onClick={onOpenAppliedModal}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 active:bg-emerald-500/40 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                   title="View your submitted scholarship applications"
                 >
                   <CheckCircle2 className="w-3 h-3" />
@@ -538,7 +554,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
             <button
               onClick={onOpenAddModal}
               disabled={isExecuting}
-              className="px-2 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/40 text-cyan-300 text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
+              className="px-2 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 active:bg-cyan-600/70 border border-cyan-500/40 text-cyan-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
               title="Add a custom government, state, or college scholarship portal"
             >
               <PlusCircle className="w-3 h-3" />
@@ -590,7 +606,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                       {scheme.is_custom && (
                         <button
                           onClick={() => onDeleteCustomScheme(scheme.id)}
-                          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 active:scale-95"
                           title="Delete this custom scheme"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -627,7 +643,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                   <button
                     onClick={() => onSelectSchemeAndExecute(match)}
                     disabled={isExecuting || !is_eligible}
-                    className="w-full mt-1 py-1.5 px-3 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:scale-[0.99] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                    className="w-full mt-1 py-1.5 px-3 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:from-blue-700 active:to-indigo-700 active:scale-[0.98] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
                   >
                     <span>
                       {isExecuting

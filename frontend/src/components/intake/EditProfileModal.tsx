@@ -77,7 +77,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
           >
             <X className="w-5 h-5" />
           </button>
@@ -88,10 +88,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('personal')}
-            className={`py-2 px-3 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-3 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
               activeTab === 'personal'
                 ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <MapPin className="w-3.5 h-3.5" />
@@ -100,10 +100,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('academic')}
-            className={`py-2 px-3 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-3 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
               activeTab === 'academic'
                 ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <GraduationCap className="w-3.5 h-3.5" />
@@ -112,10 +112,10 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('financial')}
-            className={`py-2 px-3 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 ${
+            className={`py-2 px-3 rounded-lg text-center transition-all flex items-center justify-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
               activeTab === 'financial'
                 ? 'bg-blue-600 text-white font-semibold shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <DollarSign className="w-3.5 h-3.5" />
@@ -349,13 +349,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-colors"
+              className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white font-medium text-xs transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-blue-500/25 transition-all cursor-pointer active:scale-95"
+              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-lg shadow-blue-500/25 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
             >
               <Save className="w-3.5 h-3.5" />
               <span>Save & Re-evaluate Schemes</span>

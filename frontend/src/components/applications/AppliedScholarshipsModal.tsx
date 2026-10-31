@@ -65,7 +65,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
           >
             <X className="w-5 h-5" />
           </button>
@@ -145,7 +145,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
                     </span>
                     <button
                       onClick={() => copyToClipboard(app.trackingNumber)}
-                      className="font-bold text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+                      className="font-bold text-blue-400 hover:text-blue-300 active:text-blue-500 flex items-center gap-1 cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400 rounded-sm active:scale-95 transition-transform"
                       title="Copy Tracking ID"
                     >
                       <span>{app.trackingNumber}</span>
@@ -186,7 +186,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
                       onClose();
                       onReplayRecording(app);
                     }}
-                    className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/60 border border-indigo-500/40 text-indigo-300 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95"
+                    className="px-3 py-1.5 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/60 active:bg-indigo-600/80 border border-indigo-500/40 text-indigo-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
                   >
                     <Play className="w-3.5 h-3.5" />
                     <span>Replay Execution Screencast</span>
@@ -201,7 +201,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
                           onClose();
                           onOpenReceipt(app.receipt!);
                         }}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 text-slate-200 hover:text-white text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                       >
                         <FileCheck className="w-3.5 h-3.5 text-emerald-400" />
                         <span>View Tracking Receipt</span>
@@ -210,7 +210,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
                       <button
                         type="button"
                         onClick={() => generateReceiptPdf(app.receipt!)}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer active:scale-95"
+                        className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                       >
                         <Download className="w-3.5 h-3.5" />
                         <span>Download PDF</span>
@@ -223,7 +223,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
                     href={app.portalUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-400 hover:text-white transition-all active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
                     title="Open Government Portal"
                   >
                     <ExternalLink className="w-4 h-4" />
@@ -242,7 +242,7 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
           </span>
           <button
             onClick={onClose}
-            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium transition-colors cursor-pointer"
+            className="px-4 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white font-medium transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
           >
             Close
           </button>

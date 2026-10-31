@@ -597,7 +597,7 @@ export const App: React.FC = () => {
       {/* Modern 2-Column Cockpit Layout (Simplified & Focused) */}
       <main className="flex-1 p-3 sm:p-4 max-w-[1920px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch min-h-[calc(100vh-65px)]">
         {/* Column 1: Citizen Intake Panel & Statutory Scheme Matcher */}
-        <section className="lg:col-span-5 h-[85vh] min-h-[500px]">
+        <section className="lg:col-span-5 h-[85vh] min-h-[500px] flex flex-col">
           <IntakeColumn
             profile={profile}
             dualDocResult={dualDocResult}
@@ -615,7 +615,7 @@ export const App: React.FC = () => {
         </section>
 
         {/* Column 2: Live Viewport Screencast, Anti-Bot Controls & HITL Gate */}
-        <section className="lg:col-span-7 h-[85vh] min-h-[500px]">
+        <section className="lg:col-span-7 h-[85vh] min-h-[500px] flex flex-col">
           <ViewportColumn
             currentStage={currentStage}
             activeActor={activeActor}
