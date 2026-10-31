@@ -1,4 +1,6 @@
 import base64
+import os
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -33,6 +35,12 @@ class DualDocumentUploadRequest(BaseModel):
     income_content: str = Field(description="Base64 encoded PDF or text of income certificate")
 
 
+class CustomSchemeDeleteResponse(BaseModel):
+    status: str
+    scheme_id: str
+    user_id: str
+
+
 def normalize_portal_url(scheme: ScholarshipScheme, base_url: str) -> ScholarshipScheme:
     if "portal/scholarship" in scheme.portal_url:
         new_url = f"{base_url.rstrip('/')}/portal/scholarship"
@@ -57,14 +65,7 @@ async def match_schemes(profile: CitizenProfile, request: Request, user_id: str 
     results = await client.match_all_schemes(profile, user_id=user_id)
     base = str(request.base_url)
     return [
-        SchemeMatchResult(
-            scheme=normalize_portal_url(r.scheme, base),
-            is_eligible=r.is_eligible,
-            match_score=r.match_score,
-            eligible_reasons=r.eligible_reasons,
-            missing_criteria=r.missing_criteria,
-            actionable_recommendations=r.actionable_recommendations
-        )
+        r.model_copy(update={"scheme": normalize_portal_url(r.scheme, base)})
         for r in results
     ]
 
@@ -79,7 +80,6 @@ async def sync_schemes(request: Request):
 @router.post("/schemes/custom", response_model=ScholarshipScheme)
 async def create_custom_scheme(body: CustomSchemeCreateRequest, request: Request):
     """Register a custom portal/scheme isolated strictly to the calling user_id."""
-    import uuid
     scheme_id = f"custom_{uuid.uuid4().hex[:8]}"
     scheme = ScholarshipScheme(
         id=scheme_id,
@@ -103,14 +103,13 @@ async def create_custom_scheme(body: CustomSchemeCreateRequest, request: Request
     return add_user_custom_scheme(scheme, body.user_id)
 
 
-@router.delete("/schemes/custom/{scheme_id}")
+@router.delete("/schemes/custom/{scheme_id}", response_model=CustomSchemeDeleteResponse)
 async def remove_custom_scheme(scheme_id: str, user_id: str):
     """Delete a custom scheme scoped strictly to the specified user."""
     success = delete_user_custom_scheme(scheme_id, user_id)
     if not success:
         raise HTTPException(status_code=404, detail="Custom scheme not found for this user")
-    return {"status": "DELETED", "scheme_id": scheme_id, "user_id": user_id}
-
+    return CustomSchemeDeleteResponse(status="DELETED", scheme_id=scheme_id, user_id=user_id)
 
 
 @router.post("/schemes/ocr-transcript", response_model=TranscriptExtractionResult)
@@ -156,7 +155,6 @@ class SampleDocumentPersonaResponse(BaseModel):
 @router.get("/schemes/sample-documents/{persona_id}", response_model=SampleDocumentPersonaResponse)
 async def get_sample_document_payloads(persona_id: str):
     """Retrieve raw PDF base64 payloads of authentic sample student documents for live multimodal AI verification."""
-    import os
     base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))), "sample_documents")
     
     if persona_id == "rural_merit":
@@ -184,4 +182,3 @@ async def get_sample_document_payloads(persona_id: str):
         income_file_name=i_file,
         income_content=i_b64
     )
-

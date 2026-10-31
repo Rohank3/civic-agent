@@ -2,10 +2,12 @@ import asyncio
 import base64
 import hashlib
 import logging
+import os
 import time
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from sqlalchemy import func, select
 from temporalio.client import WorkflowExecutionStatus
 
 from app.api.auth import require
@@ -38,6 +40,52 @@ class OtpPayload(BaseModel):
 class AgentControlPayload(BaseModel):
     action: str
     mode: str | None = None
+
+
+class LiveExecutionResponse(BaseModel):
+    status: str
+    case_id: str
+    service_id: str
+    portal_url: str
+    telemetry_ws: str
+
+
+class AgentControlResponse(BaseModel):
+    status: str
+    case_id: str
+    action: str
+
+
+class ExecutionInitiatedResponse(BaseModel):
+    case: str
+    run_id: str
+    service_id: str
+    status_url: str
+    require_review: bool
+
+
+class SignatureResponse(BaseModel):
+    status: str
+    case: str
+    live_authorized: bool
+
+
+class OtpResponse(BaseModel):
+    status: str
+    case: str
+
+
+class TrackingScheduleResponse(BaseModel):
+    status: str
+    tracking_id: str
+    tracking_number: str
+
+
+class ExecutionMetricsResponse(BaseModel):
+    total_submissions_attempted: int
+    total_receipts_confirmed: int
+    completion_rate: float
+    learned_portal_schemas: int
 
 
 CHROMIUM_LOW_MEM_ARGS = [
@@ -327,7 +375,7 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
         })
 
 
-@router.post("/services/execute-live", status_code=202)
+@router.post("/services/execute-live", status_code=202, response_model=LiveExecutionResponse)
 async def execute_live_service(body: ServiceRequest):
     """Launch real Playwright autonomous browser session with real-time WebSocket screencast."""
     # Enforce Pre-Flight Document Integrity & Quarantine Check
@@ -349,16 +397,16 @@ async def execute_live_service(body: ServiceRequest):
 
     case_id = f"case-{uuid4().hex[:8]}"
     asyncio.create_task(run_live_agent_session(case_id, body))
-    return {
-        "status": "LAUNCHED",
-        "case_id": case_id,
-        "service_id": body.service_id,
-        "portal_url": body.portal_url,
-        "telemetry_ws": f"/ws/telemetry/{case_id}",
-    }
+    return LiveExecutionResponse(
+        status="LAUNCHED",
+        case_id=case_id,
+        service_id=body.service_id,
+        portal_url=body.portal_url,
+        telemetry_ws=f"/ws/telemetry/{case_id}",
+    )
 
 
-@router.post("/services/{case_id}/control")
+@router.post("/services/{case_id}/control", response_model=AgentControlResponse)
 async def control_agent(case_id: str, body: AgentControlPayload):
     """Operator controls: pause, resume, step, skip."""
     act = body.action.lower()
@@ -372,7 +420,7 @@ async def control_agent(case_id: str, body: AgentControlPayload):
         telemetry_bus.signal_skip(case_id)
     elif act == "set_pacing" and body.mode:
         telemetry_bus.set_pacing(case_id, body.mode)
-    return {"status": "OK", "case_id": case_id, "action": act}
+    return AgentControlResponse(status="OK", case_id=case_id, action=act)
 
 
 @router.post("/services/preflight", response_model=PreflightReport)
@@ -384,7 +432,7 @@ async def preflight_evaluation(
     return run_preflight_check(body)
 
 
-@router.post("/services/execute", status_code=202)
+@router.post("/services/execute", status_code=202, response_model=ExecutionInitiatedResponse)
 async def execute_service(
     body: ServiceRequest,
     request: Request,
@@ -414,13 +462,13 @@ async def execute_service(
 
     status_path = f"/v1/services/{case_id}/status"
     response.headers["Location"] = status_path
-    return {
-        "case": case_id,
-        "run_id": handle.run_id,
-        "service_id": body.service_id,
-        "status_url": status_path,
-        "require_review": body.require_review
-    }
+    return ExecutionInitiatedResponse(
+        case=case_id,
+        run_id=handle.run_id,
+        service_id=body.service_id,
+        status_url=status_path,
+        require_review=body.require_review
+    )
 
 
 @router.get("/services/{case_id}/status")
@@ -435,7 +483,7 @@ async def get_service_status(
     try:
         desc = await handle.describe()
         wf_query = await handle.query("status")
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=404, detail="Case workflow not found")
 
     status_name = desc.status.name
@@ -489,7 +537,7 @@ async def get_review_packet(
     return {"case": case_id, "packet": packet_ref, "review_data": sanitized_packet}
 
 
-@router.post("/services/{case_id}/signature", status_code=202)
+@router.post("/services/{case_id}/signature", status_code=202, response_model=SignatureResponse)
 async def submit_signature(
     case_id: str,
     body: SignaturePayload,
@@ -508,14 +556,14 @@ async def submit_signature(
     except Exception:
         pass
 
-    return {
-        "status": "SIGNATURE_RECORDED",
-        "case": case_id,
-        "live_authorized": live_authorized
-    }
+    return SignatureResponse(
+        status="SIGNATURE_RECORDED",
+        case=case_id,
+        live_authorized=live_authorized
+    )
 
 
-@router.post("/services/{case_id}/otp", status_code=200)
+@router.post("/services/{case_id}/otp", status_code=200, response_model=OtpResponse)
 async def submit_otp_code(
     case_id: str,
     body: OtpPayload,
@@ -530,7 +578,7 @@ async def submit_otp_code(
         await handle.signal("signal_otp", body.code)
     except Exception:
         pass
-    return {"status": "OTP_DELIVERED", "case": case_id}
+    return OtpResponse(status="OTP_DELIVERED", case=case_id)
 
 
 @router.get("/services/{case_id}/receipt")
@@ -560,7 +608,7 @@ async def get_receipt(
     return receipt_data
 
 
-@router.post("/services/{case_id}/track", status_code=202)
+@router.post("/services/{case_id}/track", status_code=202, response_model=TrackingScheduleResponse)
 async def schedule_tracking(
     case_id: str,
     request: Request,
@@ -589,10 +637,10 @@ async def schedule_tracking(
         id=track_id,
         task_queue=rt.settings.task_queue
     )
-    return {"status": "TRACKING_SCHEDULED", "tracking_id": track_id, "tracking_number": tracking_number}
+    return TrackingScheduleResponse(status="TRACKING_SCHEDULED", tracking_id=track_id, tracking_number=tracking_number)
 
 
-@router.get("/services/metrics")
+@router.get("/services/metrics", response_model=ExecutionMetricsResponse)
 async def execution_metrics(
     request: Request,
     actor=Depends(require("staff"))
@@ -600,16 +648,18 @@ async def execution_metrics(
     """Retrieve operational execution telemetry and submission statistics."""
     rt = request.app.state.rt
     async with rt.db.connect() as conn:
-        result = await conn.execute(submissions.select())
-        rows = result.all()
-        total_cases = len(rows)
-        completed = sum(1 for r in rows if r.receipt)
+        res = await conn.execute(
+            select(func.count(submissions.c.case_id), func.count(submissions.c.receipt))
+        )
+        row = res.one()
+        total_cases = row[0] or 0
+        completed = row[1] or 0
 
     learned_keys = await rt.redis.keys("portal_memory:*")
 
-    return {
-        "total_submissions_attempted": total_cases,
-        "total_receipts_confirmed": completed,
-        "completion_rate": round(completed / max(1, total_cases), 4) if total_cases > 0 else 1.0,
-        "learned_portal_schemas": len(learned_keys)
-    }
+    return ExecutionMetricsResponse(
+        total_submissions_attempted=total_cases,
+        total_receipts_confirmed=completed,
+        completion_rate=round(completed / max(1, total_cases), 4) if total_cases > 0 else 1.0,
+        learned_portal_schemas=len(learned_keys)
+    )

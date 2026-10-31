@@ -16,15 +16,19 @@ class Challenge(BaseModel):
     code: str = Field(pattern=r"^\d{4,10}$")
 
 
-async def pending(rt, workflow_id, expected):
+class WebhookActionResponse(BaseModel):
+    received: bool = True
+
+
+async def pending(rt, workflow_id: str, expected: str):
     desc, handle, state = await workflow_status(rt, workflow_id, require_running=True)
-    if state["state"] != expected:
+    if state.get("state") != expected:
         raise HTTPException(409, "Workflow is not awaiting this action")
     case = desc.run_id if desc.workflow_type == "CAQHReattestationWorkflow" else workflow_id
     return handle, state, case
 
 
-@router.post("/workflows/{workflow_id}/otp", status_code=202)
+@router.post("/workflows/{workflow_id}/otp", status_code=202, response_model=WebhookActionResponse)
 async def otp(workflow_id: str, body: Challenge, request: Request, actor=Depends(require("otp"))):
     rt = request.app.state.rt
     handle, _, case = await pending(rt, workflow_id, "MFA_WAIT")
@@ -32,7 +36,7 @@ async def otp(workflow_id: str, body: Challenge, request: Request, actor=Depends
     key = f"otp:{case}:{ref}"
     await rt.redis.set(key, rt.audit.cipher.seal(body.code.encode(), key), ex=300)
     await handle.signal("signal_submit_otp", ref)
-    return {"received": True}
+    return WebhookActionResponse(received=True)
 
 
 @router.get("/workflows/{workflow_id}/review")
@@ -50,7 +54,7 @@ async def review(workflow_id: str, request: Request, image: bool = False, actor=
     return {"packet": state["packet"], "review": packet}
 
 
-@router.post("/workflows/{workflow_id}/signature", status_code=202)
+@router.post("/workflows/{workflow_id}/signature", status_code=202, response_model=WebhookActionResponse)
 async def sign(workflow_id: str, body: Approval, request: Request, actor=Depends(require("staff"))):
     rt = request.app.state.rt
     handle, state, case = await pending(rt, workflow_id, "HUMAN_REVIEW_WAIT")
@@ -62,4 +66,4 @@ async def sign(workflow_id: str, body: Approval, request: Request, actor=Depends
     signature = rt.audit.json(case, "signature", {"reviewer": actor, "packet": body.packet,
         "time": datetime.now(timezone.utc).isoformat()})
     await handle.signal("sign", args=[body.packet, signature])
-    return {"received": True}
+    return WebhookActionResponse(received=True)

@@ -47,6 +47,32 @@ class CitizenLoginRequest(BaseModel):
     password: str
 
 
+class CitizenUserResponse(BaseModel):
+    id: str
+    username: str
+    fullName: str
+    email: str
+    role: str
+    authMethod: str
+    profile: dict[str, Any]
+
+
+class CitizenAuthResponse(BaseModel):
+    status: str
+    user: CitizenUserResponse
+
+
+class CitizenProfileSaveResponse(BaseModel):
+    status: str
+    user_id: str
+    profile: dict[str, Any]
+
+
+class ApplicationRecordResponse(BaseModel):
+    status: str
+    total_applications: int
+
+
 @router.get("/auth/meripehchaan/config", response_model=MeriPehchaanConfigResponse)
 async def get_meripehchaan_config():
     """Report MeriPehchaan / DigiLocker National SSO live configuration status."""
@@ -72,7 +98,7 @@ async def get_meripehchaan_config():
     )
 
 
-@router.post("/auth/register")
+@router.post("/auth/register", response_model=CitizenAuthResponse)
 async def register_citizen(req: CitizenRegisterRequest):
     """Register a new citizen account and initialize their citizen profile."""
     uname_lower = req.username.lower().strip()
@@ -112,21 +138,21 @@ async def register_citizen(req: CitizenRegisterRequest):
     REGISTERED_CITIZENS_STORE[uname_lower] = user_dict
     CITIZEN_PROFILE_STORE[user_id] = profile_dict
 
-    return {
-        "status": "REGISTERED",
-        "user": {
-            "id": user_id,
-            "username": req.username.strip(),
-            "fullName": req.full_name.strip(),
-            "email": req.email.strip(),
-            "role": "applicant",
-            "authMethod": "password",
-            "profile": profile_dict,
-        }
-    }
+    return CitizenAuthResponse(
+        status="REGISTERED",
+        user=CitizenUserResponse(
+            id=user_id,
+            username=req.username.strip(),
+            fullName=req.full_name.strip(),
+            email=req.email.strip(),
+            role="applicant",
+            authMethod="password",
+            profile=profile_dict,
+        )
+    )
 
 
-@router.post("/auth/login")
+@router.post("/auth/login", response_model=CitizenAuthResponse)
 async def login_citizen(req: CitizenLoginRequest):
     """Authenticate an existing citizen using registered credentials."""
     uname_lower = req.username.lower().strip()
@@ -140,18 +166,18 @@ async def login_citizen(req: CitizenLoginRequest):
 
     profile = CITIZEN_PROFILE_STORE.get(user_record["id"], user_record.get("profile", {}))
 
-    return {
-        "status": "AUTHENTICATED",
-        "user": {
-            "id": user_record["id"],
-            "username": user_record["username"],
-            "fullName": user_record["full_name"],
-            "email": user_record["email"],
-            "role": user_record["role"],
-            "authMethod": "password",
-            "profile": profile,
-        }
-    }
+    return CitizenAuthResponse(
+        status="AUTHENTICATED",
+        user=CitizenUserResponse(
+            id=user_record["id"],
+            username=user_record["username"],
+            fullName=user_record["full_name"],
+            email=user_record["email"],
+            role=user_record["role"],
+            authMethod="password",
+            profile=profile,
+        )
+    )
 
 
 @router.get("/citizen/profile/{user_id}", response_model=CitizenProfile | dict)
@@ -163,11 +189,12 @@ async def get_citizen_profile(user_id: str):
     return profile
 
 
-@router.put("/citizen/profile/{user_id}")
+@router.put("/citizen/profile/{user_id}", response_model=CitizenProfileSaveResponse)
 async def save_citizen_profile(user_id: str, profile: CitizenProfile):
     """Save or update citizen profile for the specified user."""
-    CITIZEN_PROFILE_STORE[user_id] = profile.model_dump()
-    return {"status": "SAVED", "user_id": user_id, "profile": CITIZEN_PROFILE_STORE[user_id]}
+    dumped = profile.model_dump()
+    CITIZEN_PROFILE_STORE[user_id] = dumped
+    return CitizenProfileSaveResponse(status="SAVED", user_id=user_id, profile=dumped)
 
 
 @router.get("/citizen/applications/{user_id}")
@@ -176,15 +203,14 @@ async def get_applied_scholarships(user_id: str):
     return CITIZEN_APPLICATIONS_STORE.get(user_id, [])
 
 
-@router.post("/citizen/applications/{user_id}")
+@router.post("/citizen/applications/{user_id}", response_model=ApplicationRecordResponse)
 async def save_applied_scholarship(user_id: str, application: dict[str, Any]):
     """Record a newly filed and verified scholarship application."""
-    if user_id not in CITIZEN_APPLICATIONS_STORE:
-        CITIZEN_APPLICATIONS_STORE[user_id] = []
+    apps = CITIZEN_APPLICATIONS_STORE.setdefault(user_id, [])
     # Deduplicate by tracking number or id
     CITIZEN_APPLICATIONS_STORE[user_id] = [
-        a for a in CITIZEN_APPLICATIONS_STORE[user_id] 
+        a for a in apps
         if a.get("trackingNumber") != application.get("trackingNumber")
     ]
     CITIZEN_APPLICATIONS_STORE[user_id].insert(0, application)
-    return {"status": "RECORDED", "total_applications": len(CITIZEN_APPLICATIONS_STORE[user_id])}
+    return ApplicationRecordResponse(status="RECORDED", total_applications=len(CITIZEN_APPLICATIONS_STORE[user_id]))
