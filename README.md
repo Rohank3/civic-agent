@@ -1,7 +1,9 @@
 # CivicAgent: Autonomous Scholarship & Higher Education Bureaucracy Agent
 
 > **Track**: Civic Pulse, Digital Governance & Public Information  
-> **Problem Spectrum**: Autonomous Public Service & Bureaucracy Execution Agent
+> **Problem Spectrum**: Autonomous Public Service & Bureaucracy Execution Agent  
+> **Repository**: [https://github.com/Rohank3/civic-agent](https://github.com/Rohank3/civic-agent) (Public)  
+> **Submission Document**: [SUBMISSION.md](SUBMISSION.md) | **Pitch Deck**: [PITCH_DECK.md](PITCH_DECK.md)
 
 An autonomous web/browser execution agent powered by Playwright and FastAPI that ingests a student's demographic profile, queries live open government data (`data.gov.in`) for active statutory scholarships, extracts verified academic criteria via multimodal OCR, navigates complex multi-step legacy portals, populates application forms, handles UI obstacles, and returns completed tracking receipts with cryptographic SHA-256 audit proofs.
 
@@ -12,10 +14,11 @@ An autonomous web/browser execution agent powered by Playwright and FastAPI that
 1. **Live Open Data Integration (Zero Dummy Data Policy)**:
    - Queries live statutory scholarship registries (`data.gov.in` / National Scholarship Scheme catalogs) in real time.
    - Evaluates eligibility thresholds (family income caps, GPA/percentage cut-offs, reservation categories, state domicile) dynamically.
+   - Cryptographic SHA-256 digests prove continuous sync against official Open Government Data feeds with zero hardcoded client arrays.
 
 2. **Multimodal Document Intelligence Pre-flight**:
    - Ingests student transcript and income certificate PDFs/images.
-   - Powered by Google Gemini 3.5 Flash to extract verified GPA, roll number, academic department, institution, and annual income *before* launching the browser to prevent rejected applications.
+   - Powered by Google Gemini 3.5 Flash Lite to extract verified GPA, roll number, academic department, institution, and annual income *before* launching the browser to prevent rejected applications.
 
 3. **Autonomous Browser Navigation & Multimodal ReAct Planning**:
    - Resilient Playwright automation engine equipped with a **Gemini Flash Multimodal ReAct Planner** that inspects interactive DOM accessibility trees and viewport screenshots to generate structured action sequences on novel forms.
