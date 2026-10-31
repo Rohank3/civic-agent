@@ -9,7 +9,7 @@ class Notifications:
     @activity.defn
     async def notify(self, case: str, state: str, packet: str) -> str:
         cfg = self.rt.settings
-        webhook = getattr(cfg, "citizen_webhook", None) or getattr(cfg, "clinic_webhook", "https://example.gov/webhook")
+        webhook = getattr(cfg, "citizen_webhook", "https://example.gov/webhook")
         if not webhook.startswith("https://") and not webhook.startswith("http://localhost"):
             raise ValueError("Webhook requires TLS or localhost")
         auth = await self.rt.vault.read("platform/notification") if self.rt.vault else {"token": "dev"}

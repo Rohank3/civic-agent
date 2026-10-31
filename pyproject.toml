@@ -6,7 +6,7 @@ requires-python = ">=3.12"
 dependencies = [
  "fastapi", "uvicorn[standard]", "pydantic>=2", "pydantic-settings", "sqlalchemy[asyncio]>=2",
  "asyncpg", "redis", "temporalio>=1.10,<2", "cryptography", "httpx", "playwright>=1.50", "playwright-stealth>=2,<3",
- "pypdf", "instructor", "litellm", "pgvector", "boto3", "websockets"
+ "pypdf", "instructor", "litellm", "boto3", "websockets"
 ]
 [dependency-groups]
 dev = [
