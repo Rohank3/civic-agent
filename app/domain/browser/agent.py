@@ -269,6 +269,9 @@ class AutonomousBureaucracyAgent:
         await self.solver.dismiss_overlays_and_modals(self.page)
         await self.solver.handle_checkboxes_and_agreements(self.page)
 
+        filled_count = 0
+        newly_learned = {}
+
         # Gemini 3.5 Flash ReAct Reasoning pass on live execution
         if os.environ.get("TESTING") != "1" and not os.environ.get("PYTEST_CURRENT_TEST"):
             try:
@@ -279,11 +282,35 @@ class AutonomousBureaucracyAgent:
                         details=f"Gemini 3.5 Flash ReAct reasoning: Formulated {len(planned_actions)} action steps for Step {self.current_step}",
                         stage="REASONING"
                     )
+                    # Directly execute Gemini's planned actions
+                    for act in planned_actions:
+                        sel = act.get("selector")
+                        val = act.get("value")
+                        atype = act.get("action", "fill")
+                        if not sel:
+                            continue
+                        try:
+                            loc = self.page.locator(sel).first
+                            if await loc.is_visible(timeout=300):
+                                if atype == "fill" and val:
+                                    current_val = await loc.input_value()
+                                    if current_val != str(val):
+                                        await self._type_humanlike(loc, str(val))
+                                        filled_count += 1
+                                elif atype == "select" and val:
+                                    try:
+                                        await loc.select_option(label=str(val), timeout=400)
+                                        filled_count += 1
+                                    except Exception:
+                                        try:
+                                            await loc.select_option(value=str(val), timeout=400)
+                                            filled_count += 1
+                                        except Exception:
+                                            pass
+                        except Exception as act_err:
+                            logger.debug(f"Gemini action execution notice on {sel}: {act_err}")
             except Exception as e:
                 logger.debug(f"Gemini ReAct execution pass notice: {e}")
-
-        filled_count = 0
-        newly_learned = {}
 
         # 1. Fast-path: Check learned memory cache
         if self.memory:

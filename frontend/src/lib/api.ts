@@ -6,10 +6,9 @@ import type {
   AppliedScholarship
 } from '../types';
 
-const DEFAULT_REMOTE_BACKEND = 'https://civic-agent.onrender.com';
-const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
-export const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || (isLocal ? '' : DEFAULT_REMOTE_BACKEND)).replace(/\/$/, '');
+// Production backend URL injected at build-time via Vercel / .env (VITE_BACKEND_URL).
+// For local Vite dev, if unset, requests route through the vite.config.ts proxy.
+export const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/v1` : '/v1';
 
 let isWarmed = false;

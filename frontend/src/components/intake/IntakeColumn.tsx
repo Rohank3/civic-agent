@@ -419,24 +419,29 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           >
             <div className="flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Need test data? Load Benchmark Persona</span>
+              <span>Evaluator Benchmark Personas (Dispatches to Live Gemini OCR)</span>
             </div>
             {showTestPersonas ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           </button>
 
           {showTestPersonas && (
-            <div className="p-2.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 bg-slate-900/30">
-              {SAMPLE_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  onClick={() => handlePresetSelect(preset)}
-                  disabled={isExecuting}
-                  className="p-2 rounded-lg border border-slate-800 hover:border-indigo-500/60 bg-slate-900/60 hover:bg-slate-800 text-left transition-all cursor-pointer text-[11px]"
-                >
-                  <div className="font-semibold text-white truncate">{preset.name}</div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">{preset.category}</div>
-                </button>
-              ))}
+            <div className="p-2.5 border-t border-slate-800/80 space-y-2 bg-slate-900/30">
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                <strong className="text-emerald-400">Zero Dummy Data Compliance:</strong> Selecting a benchmark persona immediately uploads authentic statutory records to the live backend for real-time Gemini 3.5 Flash Lite multimodal extraction.
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {SAMPLE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    onClick={() => handlePresetSelect(preset)}
+                    disabled={isExecuting}
+                    className="p-2 rounded-lg border border-slate-800 hover:border-indigo-500/60 bg-slate-900/60 hover:bg-slate-800 text-left transition-all cursor-pointer text-[11px]"
+                  >
+                    <div className="font-semibold text-white truncate">{preset.name}</div>
+                    <div className="text-[10px] text-slate-400 mt-0.5">{preset.category}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           )}
         </div>

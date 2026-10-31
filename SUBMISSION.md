@@ -80,9 +80,9 @@ Higher education public grant delivery in developing democracies suffers from se
 ## 3. Prototype Link
 
 - **Live Deployment / Hosted Web App**: [https://civic-agent-alpha.vercel.app](https://civic-agent-alpha.vercel.app) *(Verified Live Global Edge Deployment)*
-- **Backend Cloud Execution Engine**: `https://civic-agent.onrender.com` *(Playwright Chromium & Gemini ReAct Engine)*
-- **Interactive API Documentation**: `https://civic-agent.onrender.com/docs`
-- **Statutory Portal Gateway**: `https://civic-agent.onrender.com/portal/scholarship`
+- **Backend Cloud Execution Engine**: `https://civic-agent-re7z.onrender.com` *(Playwright Chromium & Gemini ReAct Engine)*
+- **Interactive API Documentation**: `https://civic-agent-re7z.onrender.com/docs`
+- **Statutory Portal Gateway**: `https://civic-agent-re7z.onrender.com/portal/scholarship`
 - **Containerized Local / Private Cloud Launch**:
   ```bash
   # Single container serving Frontend + FastAPI + Playwright on port 8000
