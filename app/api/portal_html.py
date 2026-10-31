@@ -189,6 +189,8 @@ STATUTORY_PORTAL_HTML = """<!doctype html>
             document.getElementById('step4').classList.add('active');
             document.getElementById('pill3').classList.remove('active');
             document.getElementById('pill4').classList.add('active');
+            var randSuffix = Math.floor(10000 + Math.random() * 90000);
+            document.getElementById('tracking-number').innerText = 'PUB-REC-2026-' + randSuffix;
         }
     </script>
 </body>

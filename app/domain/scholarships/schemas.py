@@ -21,6 +21,9 @@ class ScholarshipScheme(BaseModel):
     login_mode: Literal["fresh_registration", "credentials", "sso"] = "fresh_registration"
     credentials_username: str | None = None
     credentials_password: str | None = None
+    gazette_notification: str = ""
+    scheme_code: str = ""
+    verification_source_url: str = ""
 
 
 class CustomSchemeCreateRequest(BaseModel):
@@ -50,6 +53,8 @@ class SchemeMatchResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
     missing_criteria: list[str] = Field(default_factory=list)
     actionable_recommendations: list[str] = Field(default_factory=list)
+    statutory_citation: str | None = None
+    gazette_reference: str | None = None
 
     @model_validator(mode="before")
     @classmethod

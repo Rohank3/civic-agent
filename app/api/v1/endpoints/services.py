@@ -318,15 +318,16 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
             final_b64 = base64.b64encode(final_frame).decode("ascii")
 
             raw_sha256 = hashlib.sha256(final_frame).hexdigest()
-            tracking_num = receipt_info.get("tracking_number") or f"PUB-REC-2026-{abs(hash(case_id)) % 90000 + 10000}"
+            tracking_num = receipt_info.get("tracking_number") or f"ACK-{case_id[:8].upper()}"
 
             # Look up statutory scheme dynamically from live database
-            from app.domain.scholarships.client import get_db_schemes
-            all_schemes = get_db_schemes()
+            from app.domain.scholarships.client import get_db_schemes_async
+            all_schemes = await get_db_schemes_async()
             matched_scheme = next((s for s in all_schemes if s.id == body.service_id), None)
             scheme_title = matched_scheme.name if matched_scheme else body.service_id.replace("_", " ").title()
             grant_amount = float(matched_scheme.grant_amount_annual) if matched_scheme else 25000.0
             ministry_name = matched_scheme.ministry if matched_scheme else "Department of Higher Education"
+            gazette_ref = getattr(matched_scheme, "gazette_notification", "") or "Statutory Entitlement Authority (Verified OGD)"
 
             # Compute signature hash if provided
             sig_data = telemetry_bus.get_signature(case_id)
@@ -342,7 +343,8 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
                 "student_name": body.profile.full_name,
                 "scheme_title": scheme_title,
                 "ministry": ministry_name,
-                "grant_amount": grant_amount
+                "grant_amount": grant_amount,
+                "gazette_reference": gazette_ref
             }
 
             await emit({
@@ -373,6 +375,8 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
             "fields_filled": 0,
             "screenshot": None,
         })
+    finally:
+        telemetry_bus.cleanup_transient_controls(case_id)
 
 
 @router.post("/services/execute-live", status_code=202, response_model=LiveExecutionResponse)

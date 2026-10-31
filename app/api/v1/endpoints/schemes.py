@@ -8,8 +8,10 @@ from app.domain.citizen.schemas import CitizenProfile
 from app.domain.scholarships.client import (
     ScholarshipRegistryClient,
     add_user_custom_scheme,
+    add_user_custom_scheme_async,
     get_user_custom_schemes,
     delete_user_custom_scheme,
+    delete_user_custom_scheme_async,
 )
 from app.domain.scholarships.schemas import (
     ScholarshipScheme,
@@ -100,13 +102,13 @@ async def create_custom_scheme(body: CustomSchemeCreateRequest, request: Request
         credentials_username=body.credentials_username,
         credentials_password=body.credentials_password,
     )
-    return add_user_custom_scheme(scheme, body.user_id)
+    return await add_user_custom_scheme_async(scheme, body.user_id)
 
 
 @router.delete("/schemes/custom/{scheme_id}", response_model=CustomSchemeDeleteResponse)
 async def remove_custom_scheme(scheme_id: str, user_id: str):
     """Delete a custom scheme scoped strictly to the specified user."""
-    success = delete_user_custom_scheme(scheme_id, user_id)
+    success = await delete_user_custom_scheme_async(scheme_id, user_id)
     if not success:
         raise HTTPException(status_code=404, detail="Custom scheme not found for this user")
     return CustomSchemeDeleteResponse(status="DELETED", scheme_id=scheme_id, user_id=user_id)

@@ -14,8 +14,24 @@ CITIZEN_PROFILE_STORE: dict[str, dict[str, Any]] = {}
 CITIZEN_APPLICATIONS_STORE: dict[str, list[dict[str, Any]]] = {}
 
 
-def hash_password(password: str) -> str:
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+def hash_password(password: str, salt: str | None = None) -> str:
+    """Hash password using PBKDF2-HMAC-SHA256 with 100,000 iterations and 16-byte random salt."""
+    if salt is None:
+        salt_bytes = os.urandom(16)
+        salt_hex = salt_bytes.hex()
+    else:
+        salt_hex = salt
+        salt_bytes = bytes.fromhex(salt_hex)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt_bytes, 100_000)
+    return f"{salt_hex}:{dk.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    """Verify password against stored salt:hash or legacy unsalted SHA-256 hash."""
+    if ":" not in stored_hash:
+        return hashlib.sha256(password.encode("utf-8")).hexdigest() == stored_hash
+    salt_hex, _ = stored_hash.split(":", 1)
+    return hash_password(password, salt=salt_hex) == stored_hash
 
 
 class MeriPehchaanConfigResponse(BaseModel):
@@ -161,7 +177,7 @@ async def login_citizen(req: CitizenLoginRequest):
     if not user_record:
         raise HTTPException(status_code=404, detail="Citizen account not found. Please click 'Create Account' to sign up.")
 
-    if user_record["password_hash"] != hash_password(req.password):
+    if not verify_password(req.password, user_record["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect password. Please verify your credentials.")
 
     profile = CITIZEN_PROFILE_STORE.get(user_record["id"], user_record.get("profile", {}))
