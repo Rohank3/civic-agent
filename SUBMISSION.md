@@ -123,8 +123,8 @@ Higher education public grant delivery in developing democracies suffers from se
 
 ## 6. Presentation / Pitch Deck
 
-- **Deck Link**: *[Paste your 5–7 slide Google Slides / Canva / PDF URL here]*
-- **Presentation Outline**: Detailed in [PITCH_DECK.md](PITCH_DECK.md)
+- **Deck Link**: [PITCH_DECK.md](PITCH_DECK.md) *(Comprehensive 7-Slide Pitch Deck Specification & Visual Architecture)*
+- **Video Demonstration Walkthrough Guide**: [DEMO_SCRIPT.md](DEMO_SCRIPT.md) *(150-second end-to-end recording script)*
 - **Slide Structure**:
   1. Title & Team Overview: CivicAgent
   2. The Problem & Real-World Context: The Scholarship Drop-off Gap
