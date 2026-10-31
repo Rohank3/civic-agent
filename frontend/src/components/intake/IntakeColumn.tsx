@@ -128,10 +128,39 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
 
   const handlePresetSelect = async (preset: SamplePreset) => {
     setIsParsing(true);
-    setUploadedTranscriptName(`${preset.name}_Transcript.txt`);
-    setUploadedIncomeName(`${preset.name}_IncomeCert.txt`);
-    await onParseDocuments(preset.transcriptText, preset.incomeCertText);
-    setIsParsing(false);
+    try {
+      const isAarav = preset.id.includes('stem') || preset.name.includes('Aarav');
+      const transcriptPath = isAarav
+        ? '/samples/Academic_Marksheet_Aarav_Sharma.pdf'
+        : '/samples/Official_Transcript_Eleanor_Vance.pdf';
+      const incomePath = isAarav
+        ? '/samples/Income_Certificate_Aarav_Sharma.pdf'
+        : '/samples/Statutory_Income_Certificate_Eleanor_Vance.pdf';
+
+      const transcriptName = isAarav ? 'Academic_Marksheet_Aarav_Sharma.pdf' : 'Official_Transcript_Eleanor_Vance.pdf';
+      const incomeName = isAarav ? 'Income_Certificate_Aarav_Sharma.pdf' : 'Statutory_Income_Certificate_Eleanor_Vance.pdf';
+
+      setUploadedTranscriptName(transcriptName);
+      setUploadedIncomeName(incomeName);
+
+      // Fetch authentic binary PDF samples and convert to base64 for live multimodal OCR
+      const [tRes, iRes] = await Promise.all([fetch(transcriptPath), fetch(incomePath)]);
+      if (tRes.ok && iRes.ok) {
+        const [tBlob, iBlob] = await Promise.all([tRes.blob(), iRes.blob()]);
+        const [tBase64, iBase64] = await Promise.all([
+          readFileAsPayload(new File([tBlob], transcriptName, { type: 'application/pdf' })),
+          readFileAsPayload(new File([iBlob], incomeName, { type: 'application/pdf' }))
+        ]);
+        await onParseDocuments(tBase64, iBase64, transcriptName, incomeName);
+      } else {
+        await onParseDocuments(preset.transcriptText, preset.incomeCertText, `${preset.name}_Transcript.txt`, `${preset.name}_IncomeCert.txt`);
+      }
+    } catch (err) {
+      console.error('Failed to load authentic sample PDF', err);
+      await onParseDocuments(preset.transcriptText, preset.incomeCertText);
+    } finally {
+      setIsParsing(false);
+    }
   };
 
   const sufficiency = dualDocResult ? dualDocResult.sufficiency_score * 100 : 95;
