@@ -1,3 +1,13 @@
+---
+title: CivicAgent
+emoji: 🏛️
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # CivicAgent: Autonomous Scholarship & Higher Education Bureaucracy Agent
 
 > **Track**: Civic Pulse, Digital Governance & Public Information  
