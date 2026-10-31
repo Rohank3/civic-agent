@@ -10,7 +10,7 @@ class TelemetryManager:
     """Active WebSocket connections registry and real-time telemetry broadcast bus."""
 
     def __init__(self):
-        self.active_connections: dict[str, list[WebSocket]] = {}
+        self.active_connections: dict[str, set[WebSocket]] = {}
         self.case_pacing: dict[str, str] = {}
         self.case_skip_signals: dict[str, bool] = {}
         self.case_paused: dict[str, bool] = {}
@@ -23,8 +23,8 @@ class TelemetryManager:
     async def connect(self, case_id: str, websocket: WebSocket):
         await websocket.accept()
         if case_id not in self.active_connections:
-            self.active_connections[case_id] = []
-        self.active_connections[case_id].append(websocket)
+            self.active_connections[case_id] = set()
+        self.active_connections[case_id].add(websocket)
         logger.info(f"WebSocket client connected to case {case_id}")
 
         # Send latest screenshot and status immediately if available
@@ -38,18 +38,19 @@ class TelemetryManager:
                     "action": "FRAME_SYNC",
                     "details": "Synchronized latest live browser frame."
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to deliver initial frame to websocket for case {case_id}: {e}")
+                self.disconnect(case_id, websocket)
 
     def disconnect(self, case_id: str, websocket: WebSocket):
         if case_id in self.active_connections:
-            if websocket in self.active_connections[case_id]:
-                self.active_connections[case_id].remove(websocket)
+            self.active_connections[case_id].discard(websocket)
             if not self.active_connections[case_id]:
                 del self.active_connections[case_id]
         logger.info(f"WebSocket client disconnected from case {case_id}")
 
     async def broadcast(self, case_id: str, message: dict[str, Any]):
+        """Concurrent non-blocking broadcast with automatic dead-socket eviction."""
         if "screenshot" in message and message["screenshot"]:
             self.case_latest_screenshot[case_id] = message["screenshot"]
         if "stage" in message:
@@ -61,12 +62,23 @@ class TelemetryManager:
                 "step": message.get("step")
             })
 
-        if case_id in self.active_connections:
-            for connection in list(self.active_connections[case_id]):
-                try:
-                    await connection.send_json(message)
-                except Exception as e:
-                    logger.debug(f"Failed to deliver websocket message: {e}")
+        sockets = list(self.active_connections.get(case_id, ()))
+        if not sockets:
+            return
+
+        dead_sockets: list[WebSocket] = []
+
+        async def _safe_send(ws: WebSocket):
+            try:
+                await ws.send_json(message)
+            except Exception as err:
+                logger.debug(f"Failed to deliver websocket message to client: {err}")
+                dead_sockets.append(ws)
+
+        await asyncio.gather(*[_safe_send(ws) for ws in sockets], return_exceptions=True)
+
+        for dead_ws in dead_sockets:
+            self.disconnect(case_id, dead_ws)
 
     def set_pacing(self, case_id: str, mode: str):
         self.case_pacing[case_id] = mode
@@ -112,6 +124,18 @@ class TelemetryManager:
 
     def get_signature(self, case_id: str) -> str | None:
         return self.case_signatures.get(case_id)
+
+    def cleanup_case(self, case_id: str):
+        """Purge all case state upon session completion."""
+        self.active_connections.pop(case_id, None)
+        self.case_pacing.pop(case_id, None)
+        self.case_skip_signals.pop(case_id, None)
+        self.case_paused.pop(case_id, None)
+        self.case_step_signals.pop(case_id, None)
+        self.case_signature_events.pop(case_id, None)
+        self.case_signatures.pop(case_id, None)
+        self.case_status.pop(case_id, None)
+        self.case_latest_screenshot.pop(case_id, None)
 
 
 telemetry_bus = TelemetryManager()

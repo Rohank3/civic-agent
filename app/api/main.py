@@ -90,6 +90,10 @@ async def authorize_request(request, call_next):
 
 
 import json
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @app.websocket("/ws/telemetry/{case_id}")
 async def telemetry_websocket(websocket: WebSocket, case_id: str):
@@ -118,9 +122,13 @@ async def telemetry_websocket(websocket: WebSocket, case_id: str):
                     await websocket.send_json({"type": "ack", "action": "skip_to_next"})
                 elif action == "ping":
                     await websocket.send_json({"type": "pong", "case_id": case_id})
-            except Exception:
+            except json.JSONDecodeError:
                 pass
-    except WebSocketDisconnect:
+            except Exception as e:
+                logger.debug(f"Websocket command error for {case_id}: {e}")
+    except (WebSocketDisconnect, Exception) as exc:
+        logger.debug(f"WebSocket closed for case {case_id}: {exc}")
+    finally:
         telemetry_bus.disconnect(case_id, websocket)
 
 

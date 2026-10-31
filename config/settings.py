@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     vault_url: str = "http://127.0.0.1:8200"
     vault_token: SecretStr = SecretStr("root")
     vault_mount: str = "secret"
+    vault_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("CIVICAGENT_VAULT_ENABLED", "VAULT_ENABLED", "vault_enabled")
+    )
     database_url: SecretStr = SecretStr("sqlite+aiosqlite:///civicagent.db")
     redis_url: SecretStr = SecretStr("redis://localhost:6379/0")
     temporal_address: str = "localhost:7233"
@@ -29,7 +33,10 @@ class Settings(BaseSettings):
     audit_dir: str = "audit"
     audit_bucket: str | None = None
     retention_days: int = Field(default=2192, ge=1)
-    citizen_webhook: str = "https://example.gov/webhook"
+    citizen_webhook: str = Field(
+        default="https://example.gov/webhook",
+        validation_alias=AliasChoices("CIVICAGENT_CITIZEN_WEBHOOK", "citizen_webhook", "clinic_webhook")
+    )
     session_ttl: int = Field(default=900, ge=30, le=86400)
     model: str = Field(
         default_factory=lambda: os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL", "gemini-3.5-flash"),
