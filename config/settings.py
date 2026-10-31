@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     )
     session_ttl: int = Field(default=900, ge=30, le=86400)
     model: str = Field(
-        default_factory=lambda: os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL", "gemini-3.5-flash"),
+        default_factory=lambda: os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL", "gemini-flash-lite-latest"),
         validation_alias=AliasChoices("CIVICAGENT_MODEL", "MODEL", "model")
     )
     approved_model_endpoint: str | None = None

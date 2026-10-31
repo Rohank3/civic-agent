@@ -1,19 +1,46 @@
+from contextlib import asynccontextmanager
+import json
+import logging
+import os
+from pathlib import Path
+
 from dotenv import load_dotenv
 load_dotenv()
 
-from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from app.api.auth import authenticate, bearer, require
+from app.api.v1.endpoints import citizen, schemes, services, webhooks
 from app.core.runtime import Runtime
 from app.core.telemetry import telemetry_bus
-from .auth import authenticate, bearer, require
-from .v1.endpoints import services, webhooks, schemes, citizen
+
+logger = logging.getLogger(__name__)
+
+# Precomputed fast path lookup structures for zero-overhead middleware routing
+PUBLIC_EXACT_PATHS: frozenset[str] = frozenset({
+    "/healthz",
+    "/readyz",
+    "/portal/scholarship",
+    "/v1/services/execute-live",
+})
+
+PUBLIC_PATH_PREFIXES: tuple[str, ...] = (
+    "/portal",
+    "/v1/schemes",
+    "/v1/auth",
+    "/v1/citizen",
+)
+
+SERVICES_PREFIX: str = "/v1/services/"
+SERVICES_PUBLIC_SUFFIXES: tuple[str, ...] = ("/signature", "/control")
 
 
 @asynccontextmanager
-async def lifespan(app):
+async def lifespan(app: FastAPI):
     app.state.rt = await Runtime.connect()
     try:
         yield
@@ -60,20 +87,16 @@ async def local_scholarship_portal():
 
 @app.middleware("http")
 async def authorize_request(request, call_next):
-    # Public endpoints that do not require bearer token authorization
-    public_paths = ("/healthz", "/readyz", "/portal/scholarship", "/v1/services/execute-live")
-    is_live_service_call = (
-        request.url.path == "/v1/services/execute-live"
-        or (request.url.path.startswith("/v1/services/") and (request.url.path.endswith("/signature") or request.url.path.endswith("/control")))
-    )
+    if request.method == "OPTIONS":
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    path: str = request.url.path
     if (
-        request.url.path in public_paths
-        or request.url.path.startswith("/portal")
-        or request.url.path.startswith("/v1/schemes")
-        or request.url.path.startswith("/v1/auth")
-        or request.url.path.startswith("/v1/citizen")
-        or is_live_service_call
-        or request.method == "OPTIONS"
+        path in PUBLIC_EXACT_PATHS
+        or path.startswith(PUBLIC_PATH_PREFIXES)
+        or (path.startswith(SERVICES_PREFIX) and path.endswith(SERVICES_PUBLIC_SUFFIXES))
     ):
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
@@ -87,12 +110,6 @@ async def authorize_request(request, call_next):
         response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     return response
-
-
-import json
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 @app.websocket("/ws/telemetry/{case_id}")
@@ -133,14 +150,9 @@ async def telemetry_websocket(websocket: WebSocket, case_id: str):
 
 
 # Mount built frontend dist folder if present (e.g. single-container containerized deployment)
-import os
-from pathlib import Path
-from fastapi.staticfiles import StaticFiles
-
 dist_path = Path(__file__).resolve().parent.parent.parent / "dist"
 if not dist_path.exists():
     dist_path = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
 
 if dist_path.exists():
     app.mount("/", StaticFiles(directory=str(dist_path), html=True), name="frontend")
-
