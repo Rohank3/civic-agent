@@ -1,5 +1,5 @@
 from typing import Any, Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class ScholarshipScheme(BaseModel):
@@ -42,11 +42,32 @@ class CustomSchemeCreateRequest(BaseModel):
 
 
 class SchemeMatchResult(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     scheme: ScholarshipScheme
     is_eligible: bool
-    eligibility_score: float = Field(ge=0.0, le=1.0, description="Match confidence score based on student attributes")
+    eligibility_score: float = Field(default=0.0, ge=0.0, le=1.0, description="Match confidence score based on student attributes")
     reasons: list[str] = Field(default_factory=list)
     missing_criteria: list[str] = Field(default_factory=list)
+    actionable_recommendations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _compat_aliases(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "match_score" in data and "eligibility_score" not in data:
+                data["eligibility_score"] = data["match_score"]
+            if "eligible_reasons" in data and "reasons" not in data:
+                data["reasons"] = data["eligible_reasons"]
+        return data
+
+    @property
+    def match_score(self) -> float:
+        return self.eligibility_score
+
+    @property
+    def eligible_reasons(self) -> list[str]:
+        return self.reasons
 
 
 class TranscriptExtractionResult(BaseModel):

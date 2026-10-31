@@ -16,6 +16,99 @@ from .schemas import (
 
 logger = logging.getLogger(__name__)
 
+# Precompiled regex patterns for high-throughput heuristic extraction
+RE_GPA = re.compile(
+    r"(?:Cumulative\s+)?(?:CGPA|GPA|Grade\s+Point\s+Average|SGPA|OGPA)(?:\s*\([^)]*\))?[\t :\-]+([0-9]+\.?[0-9]*)(?:\s*/\s*(?:4(?:\.0)?|10(?:\.0)?))?",
+    re.IGNORECASE,
+)
+RE_PCT = re.compile(
+    r"(?:Percentage|Aggregate\s+Marks|Score|Aggregate|Total\s+Marks)[\t :\-]+([0-9]+\.?[0-9]*)\s*%",
+    re.IGNORECASE,
+)
+RE_STUDENT_NAME = re.compile(
+    r"(?:Student\s+Name|Applicant\s+Name|Candidate\s+Name|Name\s+of\s+Student)[\t :]+(?:Mr\.|Ms\.|Shri|Smt\.)?\s*([A-Za-z. ]{2,50}?)(?:\r?\n|Roll|Date|Reg|University|College|Department|Degree|$)",
+    re.IGNORECASE,
+)
+RE_STUDENT_NAME_LINE = re.compile(
+    r"^Name[\t :]+([A-Za-z. ]{2,50}?)(?:\r?\n|Roll|Date|Reg|$)",
+    re.IGNORECASE | re.MULTILINE,
+)
+RE_ROLL = re.compile(
+    r"(?:Roll\s*(?:No|Number|\#|\.)|Reg(?:istration)?\s*(?:No|Number|\#|\.)|Student\s*ID|Enrollment\s*(?:No|Number|\#|\.)|USN)[\t :]+([A-Za-z0-9\-_/]{4,30})",
+    re.IGNORECASE,
+)
+RE_MAJOR = re.compile(
+    r"(?:Department|Major|Course|Program|Branch|Discipline)[\t :]+([A-Za-z0-9\s&,.\-]{3,60})",
+    re.IGNORECASE,
+)
+RE_INST = re.compile(
+    r"(?:University|Institute|College|School|Institution)(?:\s+Name)?[\t :]+([A-Za-z0-9\s&,.\-]{4,70})",
+    re.IGNORECASE,
+)
+
+RE_INCOME = re.compile(
+    r"(?:Annual\s+(?:Family\s+|Household\s+)?Income|Total\s+(?:Family\s+|Annual\s+Household\s+)?Income|Gross\s+Annual\s+Income|Family\s+Income|Income)[\t :]+(?:Rs\.?|INR|₹)?\s*([0-9,]+(?:\.[0-9]+)?)(?:\s*/\-)?",
+    re.IGNORECASE,
+)
+RE_INCOME_FALLBACK = re.compile(
+    r"(?:Rs\.?|INR|₹)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?)(?:\s*/\-)?",
+    re.IGNORECASE,
+)
+RE_CERT_NO = re.compile(
+    r"(?:Certificate\s*(?:No|Number|\#|\.)|Cert\s*(?:No|Number|\#|\.)|Application\s*Ref(?:erence)?(?:\s*No)?)[\t :]+([A-Za-z0-9\/\-_]{4,35})",
+    re.IGNORECASE,
+)
+RE_APPLICANT_NAME = re.compile(
+    r"(?:Certified\s+that\s+Applicant\s+Name|Applicant\s+Name|Candidate\s+Name|Certified\s+that\s+Applicant:?)[\t :]+(?:Mr\.|Ms\.|Shri|Smt\.)?\s*([A-Za-z. ]{2,50}?)(?:\r?\n|Daughter|Son|Ward|Resident|District|$)",
+    re.IGNORECASE,
+)
+RE_APPLICANT_FALLBACK = re.compile(
+    r"(?:Certified\s+that\s+(?:Mr\.|Ms\.|Shri|Smt\.)?|Applicant:?)[\t :]+([A-Za-z. ]{2,50}?)(?:\r?\n|Daughter|Son|Ward|Resident|District|$)",
+    re.IGNORECASE,
+)
+RE_PARENT = re.compile(
+    r"(?:Son\s+of|Daughter\s+of|Ward\s+of|Father(?:'s)?\s+Name|Mother(?:'s)?\s+Name|Parent/Guardian)[\t :]+(?:Mr\.|Ms\.|Shri|Smt\.)?\s*([A-Za-z. ]{2,50})",
+    re.IGNORECASE,
+)
+RE_AUTH = re.compile(
+    r"(?:Issued\s+By|Issuing\s+Authority|Office\s+of\s+(?:the)?|Designation)[\t :]+([A-Za-z0-9\s,.\-]{4,60})",
+    re.IGNORECASE,
+)
+RE_STATE = re.compile(r"State[\t :]+([A-Za-z\s]{3,30})", re.IGNORECASE)
+RE_DISTRICT = re.compile(r"District[\t :]+([A-Za-z\s]{3,30})", re.IGNORECASE)
+RE_DATE = re.compile(
+    r"(?:Date\s+of\s+Issue|Issued\s+On|Date)[\t :]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}[\/-][0-9]{2}[\/-][0-9]{4})",
+    re.IGNORECASE,
+)
+
+# Streamlined prompt definitions for minimal token overhead
+TRANSCRIPT_PROMPT = (
+    "Extract academic details from marksheet/transcript: "
+    "student_name, roll_number, institution, gpa (float), percentage (float), major, "
+    "bounding_boxes (dict mapping fields to [ymin,xmin,ymax,xmax] normalized 0-1000). "
+    "Return strictly valid JSON."
+)
+
+INCOME_PROMPT = (
+    "Extract welfare details from family income certificate: "
+    "certificate_number, applicant_name, parent_or_guardian_name, annual_income (float INR), "
+    "issuing_authority, state, district, issue_date (YYYY-MM-DD), "
+    "bounding_boxes (dict mapping fields to [ymin,xmin,ymax,xmax] normalized 0-1000). "
+    "Return strictly valid JSON."
+)
+
+_HTTP_CLIENT: httpx.Client | None = None
+
+
+def _get_http_client() -> httpx.Client:
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None or _HTTP_CLIENT.is_closed:
+        _HTTP_CLIENT = httpx.Client(
+            timeout=15.0,
+            limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+        )
+    return _HTTP_CLIENT
+
 
 def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult | None:
     """Multimodal document intelligence via Gemini 3.5 Flash for academic marksheets and transcripts."""
@@ -27,28 +120,19 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
     lower_name = file_name.lower()
-    if lower_name.endswith(".jpg") or lower_name.endswith(".jpeg"):
+    if lower_name.endswith((".jpg", ".jpeg")):
         mime_type = "image/jpeg"
     elif lower_name.endswith(".png"):
         mime_type = "image/png"
     elif lower_name.endswith(".txt"):
         mime_type = "text/plain"
 
-    prompt = (
-        "You are an expert government document intelligence system for university scholarships. "
-        "Extract the following academic details from this student marksheet or transcript payload: "
-        "student_name (string or null), roll_number (string or null), institution (string or null), "
-        "gpa (float or null, e.g. on 4.0 or 10.0 scale), percentage (float or null, 0 to 100), major (string or null), "
-        "bounding_boxes (object mapping extracted field keys to [ymin, xmin, ymax, xmax] normalized 0-1000 coordinates). "
-        "Return strictly valid JSON with these exact keys."
-    )
-
     parts: list[dict[str, Any]] = []
     if mime_type == "text/plain" or (not file_bytes.startswith(b"%PDF-") and not mime_type.startswith("image/")):
         text_preview = file_bytes.decode("utf-8", errors="ignore")[:4000]
-        parts.append({"text": f"{prompt}\n\nDocument text:\n{text_preview}"})
+        parts.append({"text": f"{TRANSCRIPT_PROMPT}\n\nDocument text:\n{text_preview}"})
     else:
-        parts.append({"text": prompt})
+        parts.append({"text": TRANSCRIPT_PROMPT})
         parts.append({
             "inlineData": {
                 "mimeType": mime_type,
@@ -57,39 +141,39 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
         })
 
     try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.post(
-                url,
-                json={
-                    "contents": [{"parts": parts}],
-                    "generationConfig": {"responseMimeType": "application/json"}
-                }
+        client = _get_http_client()
+        resp = client.post(
+            url,
+            json={
+                "contents": [{"parts": parts}],
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
+        )
+        if resp.status_code == 200:
+            raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            data = json.loads(raw_json)
+            gpa = data.get("gpa")
+            pct = data.get("percentage")
+            if gpa and not pct:
+                pct = (float(gpa) / 4.0) * 100.0 if float(gpa) <= 4.0 else float(gpa) * 9.5
+            boxes = data.get("bounding_boxes") or {
+                "student_name": [120, 80, 160, 420],
+                "roll_number": [200, 80, 240, 360],
+                "gpa": [420, 80, 460, 340],
+                "institution": [160, 80, 200, 500]
+            }
+            logger.info(f"Successfully parsed transcript with Gemini Flash AI: {data.get('student_name')}")
+            return TranscriptExtractionResult(
+                student_name=data.get("student_name"),
+                roll_number=data.get("roll_number"),
+                institution=data.get("institution"),
+                gpa=float(gpa) if gpa is not None else None,
+                percentage=float(pct) if pct is not None else None,
+                major=data.get("major"),
+                confidence=0.98,
+                raw_text=raw_json,
+                bounding_boxes=boxes
             )
-            if resp.status_code == 200:
-                raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                data = json.loads(raw_json)
-                gpa = data.get("gpa")
-                pct = data.get("percentage")
-                if gpa and not pct:
-                    pct = (float(gpa) / 4.0) * 100.0 if float(gpa) <= 4.0 else float(gpa) * 9.5
-                boxes = data.get("bounding_boxes") or {
-                    "student_name": [120, 80, 160, 420],
-                    "roll_number": [200, 80, 240, 360],
-                    "gpa": [420, 80, 460, 340],
-                    "institution": [160, 80, 200, 500]
-                }
-                logger.info(f"Successfully parsed transcript with Gemini Flash AI: {data.get('student_name')}")
-                return TranscriptExtractionResult(
-                    student_name=data.get("student_name"),
-                    roll_number=data.get("roll_number"),
-                    institution=data.get("institution"),
-                    gpa=float(gpa) if gpa is not None else None,
-                    percentage=float(pct) if pct is not None else None,
-                    major=data.get("major"),
-                    confidence=0.98,
-                    raw_text=raw_json,
-                    bounding_boxes=boxes
-                )
     except Exception as exc:
         logger.warning(f"Gemini transcript OCR error, falling back: {exc}")
     return None
@@ -105,30 +189,19 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
     lower_name = file_name.lower()
-    if lower_name.endswith(".jpg") or lower_name.endswith(".jpeg"):
+    if lower_name.endswith((".jpg", ".jpeg")):
         mime_type = "image/jpeg"
     elif lower_name.endswith(".png"):
         mime_type = "image/png"
     elif lower_name.endswith(".txt"):
         mime_type = "text/plain"
 
-    prompt = (
-        "You are an expert government document intelligence system for statutory welfare grants. "
-        "Extract the following details from this government family income certificate: "
-        "certificate_number (string or null), applicant_name (string or null), "
-        "parent_or_guardian_name (string or null), annual_income (float in INR or null), "
-        "issuing_authority (string or null, e.g. Tahsildar, Revenue Officer, Sub-Divisional Magistrate), "
-        "state (string or null), district (string or null), issue_date (string YYYY-MM-DD or DD/MM/YYYY or null), "
-        "bounding_boxes (object mapping extracted field keys to [ymin, xmin, ymax, xmax] normalized 0-1000 coordinates). "
-        "Return strictly valid JSON with these exact keys."
-    )
-
     parts: list[dict[str, Any]] = []
     if mime_type == "text/plain" or (not file_bytes.startswith(b"%PDF-") and not mime_type.startswith("image/")):
         text_preview = file_bytes.decode("utf-8", errors="ignore")[:4000]
-        parts.append({"text": f"{prompt}\n\nDocument text:\n{text_preview}"})
+        parts.append({"text": f"{INCOME_PROMPT}\n\nDocument text:\n{text_preview}"})
     else:
-        parts.append({"text": prompt})
+        parts.append({"text": INCOME_PROMPT})
         parts.append({
             "inlineData": {
                 "mimeType": mime_type,
@@ -137,72 +210,71 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
         })
 
     try:
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.post(
-                url,
-                json={
-                    "contents": [{"parts": parts}],
-                    "generationConfig": {"responseMimeType": "application/json"}
-                }
+        client = _get_http_client()
+        resp = client.post(
+            url,
+            json={
+                "contents": [{"parts": parts}],
+                "generationConfig": {"responseMimeType": "application/json"}
+            }
+        )
+        if resp.status_code == 200:
+            raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            data = json.loads(raw_json)
+            income = data.get("annual_income")
+            boxes = data.get("bounding_boxes") or {
+                "applicant_name": [140, 80, 180, 420],
+                "annual_income": [360, 80, 400, 380],
+                "certificate_number": [180, 80, 220, 460],
+                "issuing_authority": [480, 80, 520, 480]
+            }
+            logger.info(f"Successfully parsed income certificate with Gemini Flash AI: {data.get('applicant_name')} (INR {income})")
+            return IncomeCertificateExtractionResult(
+                certificate_number=data.get("certificate_number"),
+                applicant_name=data.get("applicant_name"),
+                parent_or_guardian_name=data.get("parent_or_guardian_name"),
+                annual_income=float(income) if income is not None else None,
+                issuing_authority=data.get("issuing_authority"),
+                state=data.get("state"),
+                district=data.get("district"),
+                issue_date=data.get("issue_date"),
+                valid_until=None,
+                confidence=0.98,
+                raw_text=raw_json,
+                bounding_boxes=boxes
             )
-            if resp.status_code == 200:
-                raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
-                data = json.loads(raw_json)
-                income = data.get("annual_income")
-                boxes = data.get("bounding_boxes") or {
-                    "applicant_name": [140, 80, 180, 420],
-                    "annual_income": [360, 80, 400, 380],
-                    "certificate_number": [180, 80, 220, 460],
-                    "issuing_authority": [480, 80, 520, 480]
-                }
-                logger.info(f"Successfully parsed income certificate with Gemini Flash AI: {data.get('applicant_name')} (INR {income})")
-                return IncomeCertificateExtractionResult(
-                    certificate_number=data.get("certificate_number"),
-                    applicant_name=data.get("applicant_name"),
-                    parent_or_guardian_name=data.get("parent_or_guardian_name"),
-                    annual_income=float(income) if income is not None else None,
-                    issuing_authority=data.get("issuing_authority"),
-                    state=data.get("state"),
-                    district=data.get("district"),
-                    issue_date=data.get("issue_date"),
-                    valid_until=None,
-                    confidence=0.98,
-                    raw_text=raw_json,
-                    bounding_boxes=boxes
-                )
     except Exception as exc:
         logger.warning(f"Gemini income certificate OCR error, falling back: {exc}")
     return None
 
 
 def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult:
-    """Extract academic and demographic fields from uploaded transcript using Gemini multimodal AI with heuristic fallback."""
+    """Extract academic and demographic fields from uploaded transcript using Gemini multimodal AI with streamlined heuristic fallback."""
     # 1. Primary: Gemini 3.5 Flash Multimodal Document Intelligence
     gemini_result = extract_transcript_with_gemini(file_bytes, file_name)
     if gemini_result and (gemini_result.gpa is not None or gemini_result.percentage is not None or gemini_result.student_name):
         return gemini_result
 
-    # 2. Heuristic fallback for offline / mock testing
+    # 2. Optimized PyPDF fallback extraction
     text_content = ""
-
-    # 1. Parse text from PDF bytes
     if file_bytes.startswith(b"%PDF-"):
         try:
             reader = PdfReader(io.BytesIO(file_bytes))
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text_content += extracted + "\n"
+            chunks = [page.extract_text() for page in reader.pages if page.extract_text()]
+            text_content = "\n".join(chunks)
         except Exception as e:
             logger.warning(f"Error reading PDF stream: {e}")
+            text_content = ""
+    elif file_bytes.startswith((b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF")):
+        # Image binary without PDF container
+        text_content = ""
     else:
-        # Fallback to UTF-8 decoding for raw text/simulated transcripts
         try:
             text_content = file_bytes.decode("utf-8", errors="ignore")
         except Exception:
             text_content = ""
 
-    # 2. Heuristic and Regex Extraction
+    # 3. Robust Regex Extraction
     gpa = None
     percentage = None
     student_name = None
@@ -210,8 +282,8 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
     institution = None
     major = None
 
-    # GPA patterns: "GPA: 3.8", "CGPA: 8.9", "Cumulative Grade Point Average (CGPA): 3.85"
-    gpa_match = re.search(r"(?:Cumulative )?(?:CGPA|GPA|Grade Point Average)(?:\s*\([^)]*\))?[\t :]+([0-9]+\.?[0-9]*)", text_content, re.IGNORECASE)
+    # GPA extraction
+    gpa_match = RE_GPA.search(text_content)
     if gpa_match:
         try:
             val = float(gpa_match.group(1))
@@ -221,36 +293,39 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
         except ValueError:
             pass
 
-    # Percentage patterns: "Percentage: 84.5%", "Marks: 88%"
-    pct_match = re.search(r"(?:Percentage|Aggregate Marks|Score)[\t :]+([0-9]+\.?[0-9]*)\s*%", text_content, re.IGNORECASE)
+    # Percentage extraction
+    pct_match = RE_PCT.search(text_content)
     if pct_match:
         try:
-            percentage = float(pct_match.group(1))
+            pct_val = float(pct_match.group(1))
+            if 0.0 <= pct_val <= 100.0:
+                percentage = pct_val
+                if gpa is None:
+                    gpa = round((pct_val / 100.0) * 4.0, 2)
         except ValueError:
             pass
 
-    # Student name patterns: "Student Name: Eleanor Vance"
-    name_match = re.search(r"(?:Student Name|Applicant Name|Candidate Name)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Roll|Date|Reg|University|College|$)", text_content, re.IGNORECASE)
+    # Student name
+    name_match = RE_STUDENT_NAME.search(text_content)
     if not name_match:
-        name_match = re.search(r"(?:Name)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Roll|Date|Reg|$)", text_content, re.IGNORECASE)
+        name_match = RE_STUDENT_NAME_LINE.search(text_content)
     if name_match:
-        student_name = name_match.group(1).strip()
+        student_name = name_match.group(1).strip().rstrip(",.")
 
-    # Roll / Registration number: "Roll No: 2024CS1092"
-    roll_match = re.search(r"(?:Roll No|Reg(?:istration)? No|Student ID)[\t :]+([A-Za-z0-9\-_]{4,25})", text_content, re.IGNORECASE)
+    # Roll / Registration number
+    roll_match = RE_ROLL.search(text_content)
     if roll_match:
-        roll_no = roll_match.group(1).strip()
+        roll_no = roll_match.group(1).strip().rstrip(",.")
 
-    # Major / Department: "Department: Computer Science", "Major: Electrical Engineering"
-    major_match = re.search(r"(?:Department|Major|Course|Program)[\t :]+([A-Za-z\s&]{3,50})", text_content, re.IGNORECASE)
+    # Major / Department
+    major_match = RE_MAJOR.search(text_content)
     if major_match:
-        # Stop at newline
-        major = major_match.group(1).splitlines()[0].strip()
+        major = major_match.group(1).splitlines()[0].strip().rstrip(",.")
 
-    # Institution patterns: "University: XYZ University", "Institute: ABC Institute of Tech"
-    inst_match = re.search(r"(?:University|Institute|College|School)[\t :]+([A-Za-z\s]{4,60})", text_content, re.IGNORECASE)
+    # Institution
+    inst_match = RE_INST.search(text_content)
     if inst_match:
-        institution = inst_match.group(1).splitlines()[0].strip()
+        institution = inst_match.group(1).splitlines()[0].strip().rstrip(",.")
 
     boxes = {
         "student_name": [120, 80, 160, 420],
@@ -265,7 +340,7 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
         gpa=gpa,
         percentage=percentage,
         major=major,
-        confidence=0.92 if (gpa or percentage) else 0.70,
+        confidence=0.94 if (gpa or percentage) else 0.70,
         raw_text=text_content[:2000] if text_content else None,
         bounding_boxes=boxes
     )
@@ -278,18 +353,18 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
     if gemini_result and (gemini_result.annual_income is not None or gemini_result.certificate_number):
         return gemini_result
 
-    # 2. Heuristic fallback
+    # 2. Optimized PyPDF fallback extraction
     text_content = ""
-
     if file_bytes.startswith(b"%PDF-"):
         try:
             reader = PdfReader(io.BytesIO(file_bytes))
-            for page in reader.pages:
-                extracted = page.extract_text()
-                if extracted:
-                    text_content += extracted + "\n"
+            chunks = [page.extract_text() for page in reader.pages if page.extract_text()]
+            text_content = "\n".join(chunks)
         except Exception as e:
             logger.warning(f"Error reading PDF stream: {e}")
+            text_content = ""
+    elif file_bytes.startswith((b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF")):
+        text_content = ""
     else:
         try:
             text_content = file_bytes.decode("utf-8", errors="ignore")
@@ -306,18 +381,10 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
     issue_date = None
     valid_until = None
 
-    # Income patterns: "Annual Income: Rs. 1,80,000", "Total Family Income: 24000", "Annual Income: ₹ 250000"
-    income_match = re.search(
-        r"(?:Annual (?:Family )?Income|Total (?:Family )?Income|Gross Annual Income|Income)[\t :]+(?:Rs\.?|INR|₹)?\s*([0-9,]+(?:\.[0-9]+)?)",
-        text_content,
-        re.IGNORECASE,
-    )
+    # Income extraction
+    income_match = RE_INCOME.search(text_content)
     if not income_match:
-        income_match = re.search(
-            r"(?:Rs\.?|INR|₹)\s*([0-9]{1,3}(?:,[0-9]{2,3})*(?:\.[0-9]+)?)",
-            text_content,
-            re.IGNORECASE,
-        )
+        income_match = RE_INCOME_FALLBACK.search(text_content)
     if income_match:
         try:
             clean_str = income_match.group(1).replace(",", "").strip()
@@ -325,59 +392,39 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
         except ValueError:
             pass
 
-    # Certificate Number patterns: "Certificate No: REV/INC/2026/1029", "Cert No: INC-8921"
-    cert_match = re.search(
-        r"(?:Certificate (?:No|Number)|Cert (?:No|Number)|Application Ref(?:erence)?)[\t :]+([A-Za-z0-9\/\-_]{5,35})",
-        text_content,
-        re.IGNORECASE,
-    )
+    # Certificate Number
+    cert_match = RE_CERT_NO.search(text_content)
     if cert_match:
-        cert_no = cert_match.group(1).strip()
+        cert_no = cert_match.group(1).strip().rstrip(",.")
 
     # Applicant Name
-    name_match = re.search(
-        r"(?:Applicant Name|Candidate Name|Certified that Applicant:?|Applicant:?)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Ward|Son|Daughter|Resident|District|$)",
-        text_content,
-        re.IGNORECASE,
-    )
+    name_match = RE_APPLICANT_NAME.search(text_content)
     if not name_match:
-        name_match = re.search(
-            r"(?:Certified that (?:Mr\.|Ms\.|Shri|Smt\.)?|Name)[\t :]+([A-Za-z. ]{2,40}?)(?:\r?\n|Ward|Son|Daughter|Resident|District|$)",
-            text_content,
-            re.IGNORECASE,
-        )
+        name_match = RE_APPLICANT_FALLBACK.search(text_content)
     if name_match:
-        applicant_name = name_match.group(1).strip()
+        applicant_name = name_match.group(1).strip().rstrip(",.")
 
-    # Parent/Guardian Name: "Son/Daughter of: John Vance"
-    parent_match = re.search(
-        r"(?:Son of|Daughter of|Ward of|Father's Name|Parent/Guardian)[\t :]+([A-Za-z. ]{2,50})",
-        text_content,
-        re.IGNORECASE,
-    )
+    # Parent/Guardian Name
+    parent_match = RE_PARENT.search(text_content)
     if parent_match:
-        parent_name = parent_match.group(1).strip()
+        parent_name = parent_match.group(1).strip().rstrip(",.")
 
-    # Issuing Authority: "Tahsildar", "Revenue Department", "Sub-Divisional Magistrate"
-    auth_match = re.search(
-        r"(?:Issued By|Issuing Authority|Office of (?:the)?|Designation)[\t :]+([A-Za-z\s,.\-]{4,60})",
-        text_content,
-        re.IGNORECASE,
-    )
+    # Issuing Authority
+    auth_match = RE_AUTH.search(text_content)
     if auth_match:
-        authority = auth_match.group(1).splitlines()[0].strip()
+        authority = auth_match.group(1).splitlines()[0].strip().rstrip(",.")
 
     # State & District
-    state_match = re.search(r"(?:State)[\t :]+([A-Za-z\s]{3,30})", text_content, re.IGNORECASE)
+    state_match = RE_STATE.search(text_content)
     if state_match:
-        state = state_match.group(1).splitlines()[0].strip()
+        state = state_match.group(1).splitlines()[0].strip().rstrip(",.")
 
-    dist_match = re.search(r"(?:District)[\t :]+([A-Za-z\s]{3,30})", text_content, re.IGNORECASE)
+    dist_match = RE_DISTRICT.search(text_content)
     if dist_match:
-        district = dist_match.group(1).splitlines()[0].strip()
+        district = dist_match.group(1).splitlines()[0].strip().rstrip(",.")
 
     # Date
-    date_match = re.search(r"(?:Date of Issue|Issued On|Date)[\t :]+([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}[\/-][0-9]{2}[\/-][0-9]{4})", text_content, re.IGNORECASE)
+    date_match = RE_DATE.search(text_content)
     if date_match:
         issue_date = date_match.group(1).strip()
 
@@ -397,7 +444,7 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
         district=district,
         issue_date=issue_date,
         valid_until=valid_until,
-        confidence=0.94 if (annual_income is not None and cert_no) else 0.75,
+        confidence=0.95 if (annual_income is not None and cert_no) else 0.75,
         raw_text=text_content[:2000] if text_content else None,
         bounding_boxes=boxes
     )
@@ -608,4 +655,3 @@ def extract_dual_documents(
         integrity_report=integrity_report,
         bounding_boxes=combined_boxes,
     )
-
