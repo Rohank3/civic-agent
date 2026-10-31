@@ -307,6 +307,14 @@ class AutonomousBureaucracyAgent:
                                             filled_count += 1
                                         except Exception:
                                             pass
+                                elif atype in ("check", "click", "checkbox"):
+                                    try:
+                                        if await loc.is_checked() is False:
+                                            await loc.check(timeout=400)
+                                            filled_count += 1
+                                    except Exception:
+                                        await loc.click(timeout=400)
+                                        filled_count += 1
                         except Exception as act_err:
                             logger.debug(f"Gemini action execution notice on {sel}: {act_err}")
             except Exception as e:
@@ -562,13 +570,34 @@ class AutonomousBureaucracyAgent:
         try:
             model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            attrs = self.profile.attributes or {}
+            cat = getattr(self.profile, "category", None) or attrs.get("category") or "GENERAL"
+            profile_summary = {
+                "name": self.profile.full_name,
+                "email": self.profile.email,
+                "phone": self.profile.phone,
+                "dob": self.profile.date_of_birth,
+                "national_id": self.profile.national_id,
+                "street": self.profile.address_street,
+                "city": self.profile.address_city,
+                "state": self.profile.address_state,
+                "zip": self.profile.address_zip,
+                "income": self.profile.income_annual,
+                "category": cat,
+                "gpa": attrs.get("gpa"),
+                "percentage": attrs.get("percentage"),
+                "major": attrs.get("major"),
+                "roll_number": attrs.get("roll_number"),
+            }
             prompt = (
                 "You are an autonomous AI web agent self-correcting a form input failure. "
                 f"Validation error messages: {error_summary}. "
-                f"Applicant Profile: Name: {self.profile.full_name}, Income: {self.profile.income_annual}, Phone: {self.profile.phone}, DOB: {self.profile.date_of_birth}, State: {self.profile.address_state}, Category: {self.profile.category}. "
-                "Analyze the error requirement (e.g. phone format, required checkbox, date format YYYY-MM-DD vs DD/MM/YYYY, numeric income). "
+                f"Applicant Verified Profile: {json.dumps(profile_summary)}. "
+                "Analyze the error requirement (e.g. phone format, required checkbox, select option, date format YYYY-MM-DD vs DD/MM/YYYY, numeric income, missing radio selection). "
                 "Return strictly valid JSON with keys: "
-                "'target_field' (string keyword like 'phone', 'dob', 'income', 'certification'), "
+                "'target_field' (string keyword like 'phone', 'dob', 'income', 'certification', 'state', 'category', 'gender'), "
+                "'action_type' ('fill' | 'select' | 'check'), "
+                "'selector' (optional CSS selector or null), "
                 "'corrected_value' (string or boolean), "
                 "'reasoning' (one sentence explanation)."
             )
@@ -580,23 +609,77 @@ class AutonomousBureaucracyAgent:
                 if resp.status_code == 200:
                     data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
                     field = data.get("target_field", "").lower()
+                    action_type = data.get("action_type", "fill")
+                    selector = data.get("selector")
                     corrected_val = str(data.get("corrected_value", ""))
                     reasoning = data.get("reasoning", "Self-corrected input format")
 
                     applied = False
-                    for key, synonyms in FIELD_SYNONYMS.items():
-                        if field in key or any(s in field for s in synonyms):
-                            for syn in synonyms:
-                                loc = self.page.locator(f"input[name*='{syn}' i], input[id*='{syn}' i]").first
-                                try:
-                                    if await loc.is_visible(timeout=100):
-                                        await self._type_humanlike(loc, corrected_val)
+
+                    # 1. If Gemini returned a direct selector, try it first
+                    if selector:
+                        try:
+                            loc = self.page.locator(selector).first
+                            if await loc.is_visible(timeout=200):
+                                if action_type == "fill":
+                                    await self._type_humanlike(loc, corrected_val)
+                                    applied = True
+                                elif action_type == "select":
+                                    try:
+                                        await loc.select_option(label=corrected_val, timeout=200)
                                         applied = True
-                                        break
-                                except Exception:
-                                    pass
-                            if applied:
-                                break
+                                    except Exception:
+                                        await loc.select_option(value=corrected_val, timeout=200)
+                                        applied = True
+                                elif action_type == "check":
+                                    await loc.check(timeout=200)
+                                    applied = True
+                        except Exception:
+                            pass
+
+                    # 2. Universal synonym-driven element resolution (inputs, selects, textareas, checkboxes)
+                    if not applied:
+                        for key, synonyms in FIELD_SYNONYMS.items():
+                            if field in key or any(s in field for s in synonyms):
+                                for syn in synonyms:
+                                    # Text input
+                                    loc_input = self.page.locator(f"input[name*='{syn}' i], input[id*='{syn}' i]").first
+                                    try:
+                                        if await loc_input.is_visible(timeout=100):
+                                            if action_type == "check":
+                                                await loc_input.check(timeout=100)
+                                            else:
+                                                await self._type_humanlike(loc_input, corrected_val)
+                                            applied = True
+                                            break
+                                    except Exception:
+                                        pass
+
+                                    # Select dropdown
+                                    loc_select = self.page.locator(f"select[name*='{syn}' i], select[id*='{syn}' i]").first
+                                    try:
+                                        if await loc_select.is_visible(timeout=100):
+                                            try:
+                                                await loc_select.select_option(label=corrected_val, timeout=100)
+                                            except Exception:
+                                                await loc_select.select_option(value=corrected_val, timeout=100)
+                                            applied = True
+                                            break
+                                    except Exception:
+                                        pass
+
+                                    # Textarea
+                                    loc_ta = self.page.locator(f"textarea[name*='{syn}' i], textarea[id*='{syn}' i]").first
+                                    try:
+                                        if await loc_ta.is_visible(timeout=100):
+                                            await self._type_humanlike(loc_ta, corrected_val)
+                                            applied = True
+                                            break
+                                    except Exception:
+                                        pass
+
+                                if applied:
+                                    break
 
                     await self.emit_telemetry(
                         action="AUTONOMOUS_SELF_CORRECTION",
@@ -640,13 +723,36 @@ class AutonomousBureaucracyAgent:
             model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
+            attrs = self.profile.attributes or {}
+            profile_summary = {
+                "full_name": self.profile.full_name,
+                "email": self.profile.email,
+                "phone": self.profile.phone,
+                "date_of_birth": self.profile.date_of_birth,
+                "national_id": self.profile.national_id,
+                "street_address": self.profile.address_street,
+                "city": self.profile.address_city,
+                "state": self.profile.address_state,
+                "zip_code": self.profile.address_zip,
+                "annual_income": self.profile.income_annual,
+                "household_size": self.profile.household_size,
+                "category": getattr(self.profile, "category", None) or attrs.get("category") or "GENERAL",
+                "academic_gpa": attrs.get("gpa"),
+                "academic_percentage": attrs.get("percentage"),
+                "institution": attrs.get("institution"),
+                "major": attrs.get("major"),
+                "roll_number": attrs.get("roll_number"),
+                "income_certificate_number": attrs.get("certificate_number"),
+            }
+
             prompt = (
                 "You are an autonomous AI bureaucracy execution agent helping a citizen apply for a statutory scholarship. "
-                f"Applicant Profile: Name: {self.profile.full_name}, Annual Income: {self.profile.income_annual}, State: {self.profile.address_state}, GPA: {self.profile.attributes.get('gpa')}. "
+                f"Applicant Verified Profile: {json.dumps(profile_summary)}. "
                 f"Interactive Elements on page: {json.dumps(elements)}. "
                 "Analyze this form milestone and determine the required actions to complete this step and advance. "
+                "Map each relevant form field to the corresponding verified applicant attribute. "
                 "Return strictly valid JSON with key 'actions': list of objects with fields: "
-                "'action' ('fill' | 'click' | 'select'), 'selector' (string CSS selector), 'value' (string or null), 'reason' (short string explanation)."
+                "'action' ('fill' | 'click' | 'select' | 'check'), 'selector' (string CSS selector), 'value' (string or null), 'reason' (short string explanation)."
             )
 
             payload = {
