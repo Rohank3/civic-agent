@@ -62,7 +62,7 @@ class SessionManager:
 
         explicit_allowed = {urlsplit(u).hostname or "" for u in profile.get("allowed_origins", [])}
         proxy = profile.get("proxy")
-        if proxy and profile.get("proxy_zip") and profile.get("facility_zip") and profile["proxy_zip"] != profile["facility_zip"]:
+        if proxy and profile.get("proxy_zip") and profile.get("domicile_zip") and profile["proxy_zip"] != profile["domicile_zip"]:
             raise ValueError("Proxy geography mismatch")
 
         cached = await self.redis.get(key)

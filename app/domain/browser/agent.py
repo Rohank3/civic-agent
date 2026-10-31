@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import logging
+import random
 import re
 import tempfile
 from pathlib import Path
@@ -94,15 +95,67 @@ class AutonomousBureaucracyAgent:
         except Exception as e:
             logger.warning(f"Telemetry emit failed: {e}")
 
+    async def _check_pause(self):
+        """Wait if the operator has paused the autonomous agent session."""
+        try:
+            from app.core.telemetry import telemetry_bus
+            while telemetry_bus.is_paused(self.case_id):
+                await asyncio.sleep(0.25)
+        except Exception:
+            pass
+
+    async def _type_humanlike(self, ctrl, text: str):
+        """Type with realistic human micro-cadence (40-85ms jitter) for anti-bot evasion."""
+        await self._check_pause()
+        try:
+            if os.environ.get("TESTING") == "1" or os.environ.get("PYTEST_CURRENT_TEST"):
+                await ctrl.fill(text)
+                return
+            from app.core.telemetry import telemetry_bus
+            # Check fast-forward chapter cut
+            if telemetry_bus.check_and_clear_skip(self.case_id):
+                await ctrl.fill(text)
+                return
+        except Exception:
+            pass
+
+        try:
+            await ctrl.scroll_into_view_if_needed(timeout=500)
+            await ctrl.click(timeout=500)
+            await ctrl.clear()
+            # If string is long (e.g. address), speed up slightly to avoid drag
+            jitter_min = 0.020 if len(text) > 20 else 0.035
+            jitter_max = 0.055 if len(text) > 20 else 0.075
+            for ch in text:
+                await ctrl.press(ch)
+                await asyncio.sleep(random.uniform(jitter_min, jitter_max))
+        except Exception:
+            try:
+                await ctrl.fill(text)
+            except Exception:
+                pass
+
+    async def check_captcha_or_otp(self) -> bool:
+        """Detect CAPTCHA challenges, Cloudflare turnstiles, or OTP prompts requiring citizen intervention."""
+        selectors = [
+            "iframe[src*='recaptcha']", "iframe[src*='turnstile']", "iframe[src*='hcaptcha']",
+            "iframe[src*='challenge']", ".captcha-container", "#captcha", "#g-recaptcha",
+            "input[name*='captcha']", "input[id*='captcha']", "input[name*='otp']",
+            "input[id*='otp']"
+        ]
+        for sel in selectors:
+            try:
+                el = self.page.locator(sel).first
+                if await el.is_visible(timeout=150):
+                    return True
+            except Exception:
+                continue
+        return False
+
     async def _pacing_delay(self):
-        if self.pacing_mode == "turbo":
-            return
-        elif self.pacing_mode == "5x":
-            await asyncio.sleep(0.05)
-        elif self.pacing_mode == "2x":
-            await asyncio.sleep(0.15)
-        else:
-            await asyncio.sleep(0.35)
+        await self._check_pause()
+        # Natural human reading and step delay
+        await asyncio.sleep(random.uniform(0.35, 0.65))
 
     def _extract_name_parts(self, full_name: str) -> tuple[str, str]:
         parts = full_name.strip().split()
@@ -288,7 +341,7 @@ class AutonomousBureaucracyAgent:
                 else:
                     current_val = info["value"]
                     if current_val != target_value:
-                        await ctrl.fill(target_value)
+                        await self._type_humanlike(ctrl, target_value)
                         filled_count += 1
             except Exception as e:
                 logger.debug(f"Skipping control: {e}")
