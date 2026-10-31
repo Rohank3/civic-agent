@@ -299,6 +299,23 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
 @router.post("/services/execute-live", status_code=202)
 async def execute_live_service(body: ServiceRequest):
     """Launch real Playwright autonomous browser session with real-time WebSocket screencast."""
+    # Enforce Pre-Flight Document Integrity & Quarantine Check
+    if body.documents:
+        from app.domain.scholarships.ocr import audit_pdf_integrity
+        for doc in body.documents:
+            if doc.kind == "pdf":
+                try:
+                    raw_bytes = base64.b64decode(doc.content, validate=True)
+                except Exception:
+                    raw_bytes = doc.content.encode("utf-8")
+                report = audit_pdf_integrity(raw_bytes, doc.name)
+                if report.quarantine_active:
+                    detail_msg = report.forensic_findings[0] if report.forensic_findings else "Statutory document structure altered."
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"Execution blocked: Document '{doc.name}' failed statutory integrity audit (Quarantine Active). {detail_msg} Please verify via DigiLocker."
+                    )
+
     case_id = f"case-{uuid4().hex[:8]}"
     asyncio.create_task(run_live_agent_session(case_id, body))
     return {
