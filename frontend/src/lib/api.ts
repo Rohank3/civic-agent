@@ -6,7 +6,18 @@ import type {
   AppliedScholarship
 } from '../types';
 
-const API_BASE = '/v1';
+const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+export const API_BASE = BACKEND_URL ? `${BACKEND_URL}/v1` : '/v1';
+
+export function getWsUrl(caseId: string): string {
+  if (BACKEND_URL) {
+    const wsProto = BACKEND_URL.startsWith('https://') ? 'wss:' : 'ws:';
+    const host = BACKEND_URL.replace(/^https?:\/\//, '');
+    return `${wsProto}//${host}/ws/telemetry/${caseId}`;
+  }
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}/ws/telemetry/${caseId}`;
+}
 
 export function getLocalCustomSchemes(userId: string): ScholarshipScheme[] {
   try {

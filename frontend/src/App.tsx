@@ -33,7 +33,8 @@ import {
   saveAppliedScholarship,
   executeLiveService,
   controlAgent,
-  syncSchemesFromGov
+  syncSchemesFromGov,
+  getWsUrl
 } from './lib/api';
 
 export const App: React.FC = () => {
@@ -116,8 +117,7 @@ export const App: React.FC = () => {
   // Initialize live telemetry socket
   useEffect(() => {
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/telemetry/${caseIdRef.current}`);
+      const ws = new WebSocket(getWsUrl(caseIdRef.current));
       ws.onopen = () => setWsConnected(true);
       ws.onclose = () => setWsConnected(false);
       wsRef.current = ws;
@@ -374,8 +374,7 @@ export const App: React.FC = () => {
       if (wsRef.current) {
         wsRef.current.close();
       }
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/telemetry/${newCaseId}`);
+      const ws = new WebSocket(getWsUrl(newCaseId));
       wsRef.current = ws;
 
       ws.onopen = () => {
