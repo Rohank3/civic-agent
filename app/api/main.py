@@ -79,10 +79,11 @@ async def invalid_input(request, exc):
 
 
 @app.get("/portal/scholarship", response_class=HTMLResponse)
-async def local_scholarship_portal():
-    """Authentic local multi-step scholarship portal with modal obstacles for offline evaluation."""
-    from app.api.portal_html import STATUTORY_PORTAL_HTML
-    return HTMLResponse(content=STATUTORY_PORTAL_HTML)
+@app.get("/portal/scholarship/{scheme_id}", response_class=HTMLResponse)
+async def local_scholarship_portal(scheme_id: str | None = None):
+    """Authentic local multi-step scholarship portal with modal obstacles dynamically rendered per scheme."""
+    from app.api.portal_html import get_portal_html_for_scheme
+    return HTMLResponse(content=get_portal_html_for_scheme(scheme_id))
 
 
 @app.middleware("http")

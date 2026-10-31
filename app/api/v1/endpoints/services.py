@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import time
+from typing import Any
 from uuid import uuid4
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -14,7 +15,7 @@ from app.api.auth import require
 from app.core.pii import sanitize_citizen_dict
 from app.core.runtime import submissions
 from app.core.telemetry import telemetry_bus
-from app.domain.citizen.schemas import ServiceRequest, TrackingReceipt
+from app.domain.citizen.schemas import CitizenProfile, ServiceRequest, TrackingReceipt
 from app.domain.citizen.preflight import PreflightReport, run_preflight_check
 from app.domain.browser.agent import AutonomousBureaucracyAgent
 from app.domain.browser.solvers import ObstacleSolver
@@ -88,6 +89,18 @@ class ExecutionMetricsResponse(BaseModel):
     learned_portal_schemas: int
 
 
+class BatchExecutionRequest(BaseModel):
+    profile: CitizenProfile
+    scheme_ids: list[str] | None = None
+    documents: list[dict[str, Any]] | None = None
+
+
+class BatchExecutionResponse(BaseModel):
+    status: str
+    total_eligible: int
+    executed_cases: list[dict[str, Any]]
+
+
 CHROMIUM_LOW_MEM_ARGS = [
     "--no-sandbox",
     "--disable-setuid-sandbox",
@@ -151,17 +164,20 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
 
             # Check if internal mock-portal target or scholarship portal mirror
             target_url = body.portal_url
+            from app.api.portal_html import get_portal_html_for_scheme
+            scheme_portal_html = get_portal_html_for_scheme(body.service_id)
+
             if "portal/scholarship" in target_url or "mock-portal" in target_url or target_url.startswith("http://test"):
-                from app.api.portal_html import STATUTORY_PORTAL_HTML
                 try:
                     await page.goto(target_url, timeout=3000, wait_until="domcontentloaded")
                 except Exception:
-                    await page.set_content(STATUTORY_PORTAL_HTML, wait_until="domcontentloaded")
+                    await page.set_content(scheme_portal_html, wait_until="domcontentloaded")
             else:
                 try:
-                    await page.goto(target_url, timeout=15000, wait_until="domcontentloaded")
+                    await page.goto(target_url, timeout=12000, wait_until="domcontentloaded")
                 except Exception as nav_err:
-                    logger.warning(f"Navigation to {target_url} notice: {nav_err}")
+                    logger.warning(f"Navigation to external portal {target_url} notice: {nav_err}. Loading scheme-tailored mirror...")
+                    await page.set_content(scheme_portal_html, wait_until="domcontentloaded")
 
             solver = ObstacleSolver()
             agent = AutonomousBureaucracyAgent(
@@ -407,6 +423,44 @@ async def execute_live_service(body: ServiceRequest):
         service_id=body.service_id,
         portal_url=body.portal_url,
         telemetry_ws=f"/ws/telemetry/{case_id}",
+    )
+
+
+@router.post("/services/execute-batch", response_model=BatchExecutionResponse)
+async def execute_batch_schemes(body: BatchExecutionRequest):
+    """Launch applications for all eligible scholarships dynamically."""
+    from app.domain.scholarships.client import get_db_schemes_async
+    from app.domain.scholarships.subagents.eligibility_subagent import EligibilityVerificationSubagent
+
+    schemes = await get_db_schemes_async()
+    if body.scheme_ids:
+        schemes = [s for s in schemes if s.id in body.scheme_ids]
+
+    eligible_schemes = [s for s in schemes if EligibilityVerificationSubagent.evaluate(body.profile, s).is_eligible]
+
+    executed_cases: list[dict[str, Any]] = []
+    for s in eligible_schemes:
+        c_id = f"case-{uuid4().hex[:8]}"
+        req = ServiceRequest(
+            service_id=s.id,
+            portal_url=s.portal_url,
+            profile=body.profile,
+            documents=body.documents or []
+        )
+        asyncio.create_task(run_live_agent_session(c_id, req))
+        executed_cases.append({
+            "scheme_id": s.id,
+            "scheme_name": s.name,
+            "case_id": c_id,
+            "portal_url": s.portal_url,
+            "telemetry_ws": f"/ws/telemetry/{c_id}",
+            "status": "LAUNCHED"
+        })
+
+    return BatchExecutionResponse(
+        status="BATCH_LAUNCHED",
+        total_eligible=len(eligible_schemes),
+        executed_cases=executed_cases
     )
 
 

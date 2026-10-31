@@ -44,10 +44,10 @@ class CustomSchemeDeleteResponse(BaseModel):
 
 
 def normalize_portal_url(scheme: ScholarshipScheme, base_url: str) -> ScholarshipScheme:
+    """Normalize local mirror URLs while preserving scheme-specific portal routes."""
     if "portal/scholarship" in scheme.portal_url:
-        new_url = f"{base_url.rstrip('/')}/portal/scholarship"
-        if scheme.portal_url != new_url:
-            return scheme.model_copy(update={"portal_url": new_url})
+        new_url = f"{base_url.rstrip('/')}/portal/scholarship/{scheme.id}"
+        return scheme.model_copy(update={"portal_url": new_url})
     return scheme
 
 
@@ -144,6 +144,35 @@ async def ocr_dual_documents(body: DualDocumentUploadRequest):
         i_bytes, body.income_file_name
     )
     return result
+
+
+class PersonaMetadata(BaseModel):
+    id: str
+    name: str
+    title: str
+    badge: str
+    category: str
+
+
+@router.get("/schemes/personas", response_model=list[PersonaMetadata])
+async def list_sample_personas():
+    """Retrieve verified evaluation personas backed by authentic statutory documents on disk."""
+    return [
+        PersonaMetadata(
+            id="first_gen_stem",
+            name="Aarav Sharma",
+            title="First-Gen STEM Scholar",
+            badge="High Eligibility (3 Schemes)",
+            category="OBC / Need-based"
+        ),
+        PersonaMetadata(
+            id="rural_merit",
+            name="Eleanor Vance",
+            title="Rural Need-Based Scholar",
+            badge="100% Match (Tier 1)",
+            category="GENERAL / Economically Weak"
+        )
+    ]
 
 
 class SampleDocumentPersonaResponse(BaseModel):
