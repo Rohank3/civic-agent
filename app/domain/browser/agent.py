@@ -454,6 +454,25 @@ class AutonomousBureaucracyAgent:
             except Exception:
                 continue
 
+        # If step failed to advance, inspect DOM for validation alerts and trigger autonomous self-correction
+        corrected = await self.diagnose_and_self_correct_errors()
+        if corrected:
+            # Retry advancing step after self-correction
+            for sel in next_button_selectors[:4]:
+                try:
+                    btn = self.page.locator(sel).first
+                    if await btn.is_visible(timeout=50):
+                        await btn.click()
+                        self.current_step += 1
+                        await self.emit_telemetry(
+                            action="SELF_CORRECTION_ADVANCED",
+                            details=f"Successfully self-corrected validation obstacle; advanced to Step {self.current_step}",
+                            stage="NAVIGATING"
+                        )
+                        return True
+                except Exception:
+                    pass
+
         # Vision Grounding Fallback: use Gemini Vision locator to ground and click next button
         if self.vision:
             for label in ("Next Step", "Next", "Save & Continue", "Continue", "Proceed", "Review"):
@@ -470,6 +489,96 @@ class AutonomousBureaucracyAgent:
                 except Exception:
                     continue
 
+        return False
+
+    async def scan_for_validation_errors(self) -> list[dict[str, str]]:
+        """Detect visible form validation errors, invalid-feedback alerts, or rejected fields."""
+        error_selectors = [
+            ".error", ".invalid-feedback", ".alert-danger", "[aria-invalid='true']",
+            ".validation-error", ".field-validation-error", ".text-danger", "span.error-msg",
+            "div.error-text", ".error-message"
+        ]
+        errors = []
+        for sel in error_selectors:
+            try:
+                loc = self.page.locator(sel)
+                count = await loc.count()
+                for i in range(count):
+                    el = loc.nth(i)
+                    if await el.is_visible(timeout=50):
+                        text = (await el.inner_text()).strip()
+                        if text:
+                            errors.append({"selector": sel, "message": text})
+            except Exception:
+                continue
+        return errors
+
+    async def diagnose_and_self_correct_errors(self) -> bool:
+        """Use Gemini Flash to inspect validation error text and mutate form inputs autonomously."""
+        errors = await self.scan_for_validation_errors()
+        if not errors:
+            return False
+
+        error_summary = "; ".join(e["message"] for e in errors[:3])
+        logger.info(f"Detected form validation errors: {error_summary}")
+
+        await self.emit_telemetry(
+            action="VALIDATION_ERROR_DETECTED",
+            details=f"Portal reported input issue: '{error_summary}'. Invoking Gemini ReAct for dynamic self-correction...",
+            stage="REASONING"
+        )
+
+        api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return False
+
+        try:
+            model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            prompt = (
+                "You are an autonomous AI web agent self-correcting a form input failure. "
+                f"Validation error messages: {error_summary}. "
+                f"Applicant Profile: Name: {self.profile.full_name}, Income: {self.profile.income_annual}, Phone: {self.profile.phone}, DOB: {self.profile.date_of_birth}, State: {self.profile.address_state}, Category: {self.profile.category}. "
+                "Analyze the error requirement (e.g. phone format, required checkbox, date format YYYY-MM-DD vs DD/MM/YYYY, numeric income). "
+                "Return strictly valid JSON with keys: "
+                "'target_field' (string keyword like 'phone', 'dob', 'income', 'certification'), "
+                "'corrected_value' (string or boolean), "
+                "'reasoning' (one sentence explanation)."
+            )
+            async with httpx.AsyncClient(timeout=6.0) as client:
+                resp = await client.post(url, json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"responseMimeType": "application/json"}
+                })
+                if resp.status_code == 200:
+                    data = json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
+                    field = data.get("target_field", "").lower()
+                    corrected_val = str(data.get("corrected_value", ""))
+                    reasoning = data.get("reasoning", "Self-corrected input format")
+
+                    applied = False
+                    for key, synonyms in FIELD_SYNONYMS.items():
+                        if field in key or any(s in field for s in synonyms):
+                            for syn in synonyms:
+                                loc = self.page.locator(f"input[name*='{syn}' i], input[id*='{syn}' i]").first
+                                try:
+                                    if await loc.is_visible(timeout=100):
+                                        await self._type_humanlike(loc, corrected_val)
+                                        applied = True
+                                        break
+                                except Exception:
+                                    pass
+                            if applied:
+                                break
+
+                    await self.emit_telemetry(
+                        action="AUTONOMOUS_SELF_CORRECTION",
+                        details=f"Self-corrected field '{field}' to '{corrected_val}': {reasoning}",
+                        stage="POPULATING_FORM"
+                    )
+                    return True
+        except Exception as e:
+            logger.debug(f"Self-correction reasoning notice: {e}")
         return False
 
     async def plan_page_actions_with_gemini(self) -> list[dict[str, Any]]:
