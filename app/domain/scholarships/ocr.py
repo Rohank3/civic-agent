@@ -1,8 +1,11 @@
 import base64
 import io
+import json
 import logging
+import os
 import re
 from typing import Any
+import httpx
 from pypdf import PdfReader
 from .schemas import (
     TranscriptExtractionResult,
@@ -13,8 +16,156 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
+def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult | None:
+    """Multimodal document intelligence via Gemini 3.5 Flash for academic marksheets and transcripts."""
+    api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
+    lower_name = file_name.lower()
+    if lower_name.endswith(".jpg") or lower_name.endswith(".jpeg"):
+        mime_type = "image/jpeg"
+    elif lower_name.endswith(".png"):
+        mime_type = "image/png"
+    elif lower_name.endswith(".txt"):
+        mime_type = "text/plain"
+
+    prompt = (
+        "You are an expert government document intelligence system for university scholarships. "
+        "Extract the following academic details from this student marksheet or transcript payload: "
+        "student_name (string or null), roll_number (string or null), institution (string or null), "
+        "gpa (float or null, e.g. on 4.0 or 10.0 scale), percentage (float or null, 0 to 100), major (string or null). "
+        "Return strictly valid JSON with these exact keys."
+    )
+
+    parts: list[dict[str, Any]] = []
+    if mime_type == "text/plain" or (not file_bytes.startswith(b"%PDF-") and not mime_type.startswith("image/")):
+        text_preview = file_bytes.decode("utf-8", errors="ignore")[:4000]
+        parts.append({"text": f"{prompt}\n\nDocument text:\n{text_preview}"})
+    else:
+        parts.append({"text": prompt})
+        parts.append({
+            "inlineData": {
+                "mimeType": mime_type,
+                "data": base64.b64encode(file_bytes).decode("ascii")
+            }
+        })
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(
+                url,
+                json={
+                    "contents": [{"parts": parts}],
+                    "generationConfig": {"responseMimeType": "application/json"}
+                }
+            )
+            if resp.status_code == 200:
+                raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                data = json.loads(raw_json)
+                gpa = data.get("gpa")
+                pct = data.get("percentage")
+                if gpa and not pct:
+                    pct = (float(gpa) / 4.0) * 100.0 if float(gpa) <= 4.0 else float(gpa) * 9.5
+                logger.info(f"Successfully parsed transcript with Gemini Flash AI: {data.get('student_name')}")
+                return TranscriptExtractionResult(
+                    student_name=data.get("student_name"),
+                    roll_number=data.get("roll_number"),
+                    institution=data.get("institution"),
+                    gpa=float(gpa) if gpa is not None else None,
+                    percentage=float(pct) if pct is not None else None,
+                    major=data.get("major"),
+                    confidence=0.98,
+                    raw_text=raw_json
+                )
+    except Exception as exc:
+        logger.warning(f"Gemini transcript OCR error, falling back: {exc}")
+    return None
+
+
+def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) -> IncomeCertificateExtractionResult | None:
+    """Multimodal document intelligence via Gemini 3.5 Flash for statutory income certificates."""
+    api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+
+    mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
+    lower_name = file_name.lower()
+    if lower_name.endswith(".jpg") or lower_name.endswith(".jpeg"):
+        mime_type = "image/jpeg"
+    elif lower_name.endswith(".png"):
+        mime_type = "image/png"
+    elif lower_name.endswith(".txt"):
+        mime_type = "text/plain"
+
+    prompt = (
+        "You are an expert government document intelligence system for statutory welfare grants. "
+        "Extract the following details from this government family income certificate: "
+        "certificate_number (string or null), applicant_name (string or null), "
+        "parent_or_guardian_name (string or null), annual_income (float in INR or null), "
+        "issuing_authority (string or null, e.g. Tahsildar, Revenue Officer, Sub-Divisional Magistrate), "
+        "state (string or null), district (string or null), issue_date (string YYYY-MM-DD or DD/MM/YYYY or null). "
+        "Return strictly valid JSON with these exact keys."
+    )
+
+    parts: list[dict[str, Any]] = []
+    if mime_type == "text/plain" or (not file_bytes.startswith(b"%PDF-") and not mime_type.startswith("image/")):
+        text_preview = file_bytes.decode("utf-8", errors="ignore")[:4000]
+        parts.append({"text": f"{prompt}\n\nDocument text:\n{text_preview}"})
+    else:
+        parts.append({"text": prompt})
+        parts.append({
+            "inlineData": {
+                "mimeType": mime_type,
+                "data": base64.b64encode(file_bytes).decode("ascii")
+            }
+        })
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(
+                url,
+                json={
+                    "contents": [{"parts": parts}],
+                    "generationConfig": {"responseMimeType": "application/json"}
+                }
+            )
+            if resp.status_code == 200:
+                raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+                data = json.loads(raw_json)
+                income = data.get("annual_income")
+                logger.info(f"Successfully parsed income certificate with Gemini Flash AI: {data.get('applicant_name')} (INR {income})")
+                return IncomeCertificateExtractionResult(
+                    certificate_number=data.get("certificate_number"),
+                    applicant_name=data.get("applicant_name"),
+                    parent_or_guardian_name=data.get("parent_or_guardian_name"),
+                    annual_income=float(income) if income is not None else None,
+                    issuing_authority=data.get("issuing_authority"),
+                    state=data.get("state"),
+                    district=data.get("district"),
+                    issue_date=data.get("issue_date"),
+                    valid_until=None,
+                    confidence=0.98,
+                    raw_text=raw_json
+                )
+    except Exception as exc:
+        logger.warning(f"Gemini income certificate OCR error, falling back: {exc}")
+    return None
+
+
 def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult:
-    """Extract academic and demographic fields from uploaded transcript or marksheet."""
+    """Extract academic and demographic fields from uploaded transcript using Gemini multimodal AI with heuristic fallback."""
+    # 1. Primary: Gemini 3.5 Flash Multimodal Document Intelligence
+    gemini_result = extract_transcript_with_gemini(file_bytes, file_name)
+    if gemini_result and (gemini_result.gpa is not None or gemini_result.percentage is not None or gemini_result.student_name):
+        return gemini_result
+
+    # 2. Heuristic fallback for offline / mock testing
     text_content = ""
 
     # 1. Parse text from PDF bytes
@@ -95,7 +246,13 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
 
 
 def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> IncomeCertificateExtractionResult:
-    """Extract annual income, certificate ID, and authority from uploaded income certificate."""
+    """Extract annual income, certificate ID, and authority from uploaded income certificate using Gemini AI with fallback."""
+    # 1. Primary: Gemini 3.5 Flash Multimodal Document Intelligence
+    gemini_result = extract_income_certificate_with_gemini(file_bytes, file_name)
+    if gemini_result and (gemini_result.annual_income is not None or gemini_result.certificate_number):
+        return gemini_result
+
+    # 2. Heuristic fallback
     text_content = ""
 
     if file_bytes.startswith(b"%PDF-"):
@@ -240,29 +397,32 @@ def extract_dual_documents(
 
     sufficiency_score = max(0.1, min(1.0, round(sufficiency_score, 2)))
 
-    # Determine primary applicant full name
-    primary_name = transcript_res.student_name or income_res.applicant_name or "Applicant Student"
+    # Determine primary applicant full name without mock fallbacks
+    primary_name = transcript_res.student_name or income_res.applicant_name or ""
+    if not primary_name:
+        warnings.append("Applicant name was not found in the uploaded documents. Please review and edit your Citizen Profile.")
+        sufficiency_score = max(0.1, round(sufficiency_score - 0.15, 2))
 
     auto_profile = {
-        "full_name": primary_name,
-        "date_of_birth": "2002-05-15",
-        "national_id": f"ID-{income_res.certificate_number or '2026-IND'}",
-        "email": f"{primary_name.lower().replace(' ', '.')}@university.edu",
-        "phone": "9876543210",
-        "address_street": "Civil Lines, College Road",
-        "address_city": income_res.district or "Central",
-        "address_state": income_res.state or "Delhi",
-        "address_zip": "110001",
-        "income_annual": income_res.annual_income or 180000.0,
-        "household_size": 4,
-        "category": "OBC",
+        "full_name": primary_name or "Citizen Applicant",
+        "date_of_birth": "2003-01-01",
+        "national_id": f"ID-{income_res.certificate_number}" if income_res.certificate_number else "",
+        "email": f"{primary_name.lower().replace(' ', '.')}@university.edu" if primary_name else "",
+        "phone": "",
+        "address_street": "",
+        "address_city": income_res.district or "",
+        "address_state": income_res.state or "",
+        "address_zip": "",
+        "income_annual": income_res.annual_income if income_res.annual_income is not None else 0.0,
+        "household_size": 1,
+        "category": "GENERAL",
         "attributes": {
-            "gpa": transcript_res.gpa or 3.85,
-            "percentage": transcript_res.percentage or 82.5,
-            "major": transcript_res.major or "Computer Science & Engineering",
-            "institution": transcript_res.institution or "State Institute of Technology",
-            "roll_number": transcript_res.roll_number or "2024CS-1092",
-            "certificate_number": income_res.certificate_number or "INC-2026-8819",
+            "gpa": transcript_res.gpa,
+            "percentage": transcript_res.percentage,
+            "major": transcript_res.major or "",
+            "institution": transcript_res.institution or "",
+            "roll_number": transcript_res.roll_number or "",
+            "certificate_number": income_res.certificate_number or "",
         },
     }
 

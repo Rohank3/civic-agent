@@ -1,10 +1,22 @@
+import os
+from pathlib import Path
 from urllib.parse import urlsplit
-from pydantic import Field, SecretStr, model_validator
+from dotenv import load_dotenv
+from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Automatically locate and load .env from the project's civic-agent directory
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+if ENV_FILE.exists():
+    load_dotenv(ENV_FILE, override=False)
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CIVICAGENT_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="CIVICAGENT_",
+        env_file=(str(ENV_FILE), ".env"),
+        extra="ignore"
+    )
     vault_url: str = "http://127.0.0.1:8200"
     vault_token: SecretStr = SecretStr("root")
     vault_mount: str = "secret"
@@ -19,7 +31,10 @@ class Settings(BaseSettings):
     retention_days: int = Field(default=2192, ge=1)
     citizen_webhook: str = "https://example.gov/webhook"
     session_ttl: int = Field(default=900, ge=30, le=86400)
-    model: str = "gemini-2.0-flash"
+    model: str = Field(
+        default_factory=lambda: os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL", "gemini-3.5-flash"),
+        validation_alias=AliasChoices("CIVICAGENT_MODEL", "MODEL", "model")
+    )
     approved_model_endpoint: str | None = None
     gemini_api_key: SecretStr | None = None
     data_gov_api_key: str | None = None
