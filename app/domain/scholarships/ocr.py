@@ -5,6 +5,8 @@ import logging
 import os
 import re
 from typing import Any
+from dotenv import load_dotenv
+load_dotenv()
 import httpx
 from pypdf import PdfReader
 from .schemas import (
@@ -110,13 +112,58 @@ def _get_http_client() -> httpx.Client:
     return _HTTP_CLIENT
 
 
+def _compute_dynamic_line_bounding_box(text: str | None, target_val: Any, default_line: int = 1) -> list[int]:
+    """Calculate authentic normalized bounding box [ymin, xmin, ymax, xmax] (0-1000 scale) based on document line offset."""
+    if not text:
+        return [int(default_line * 80), 80, int((default_line + 1) * 80), 450]
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    total_lines = max(1, len(lines))
+    target_idx = -1
+    if target_val is not None:
+        val_str = str(target_val).lower().strip()
+        if val_str:
+            for idx, line in enumerate(lines):
+                if val_str in line.lower():
+                    target_idx = idx
+                    break
+    if target_idx == -1:
+        target_idx = min(default_line, total_lines - 1)
+
+    ymin = int((target_idx / total_lines) * 900) + 50
+    ymax = min(1000, ymin + max(30, int(800 / total_lines)))
+    return [ymin, 80, ymax, 450]
+
+
+def _clean_field_str(val: Any) -> str | None:
+    """Sanitize and clean raw LLM string extraction against thought bleed or trailing delimiters."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    if not s:
+        return None
+    cleaned = re.split(r"[\r\n]|TypeSchema|should be|wait", s)[0].strip()
+    cleaned = re.sub(r"[^\x20-\x7E]", "", cleaned)
+    cleaned = cleaned.strip(" \t\r\n,.;:-_\"'`")
+    return cleaned if cleaned else None
+
+
+def _clean_identifier(val: Any) -> str | None:
+    """Sanitize certificate IDs and roll numbers to alphanumeric code symbols."""
+    if val is None:
+        return None
+    s = str(val).strip()
+    cleaned = re.split(r"[\r\n]|TypeSchema|should be|wait", s)[0].strip()
+    cleaned = re.sub(r"[^A-Za-z0-9\-_/]", "", cleaned)
+    return cleaned if cleaned else None
+
+
 def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult | None:
     """Multimodal document intelligence via Gemini 3.5 Flash for academic marksheets and transcripts."""
     api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash-lite"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-flash-lite-latest"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
     lower_name = file_name.lower()
@@ -128,9 +175,10 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
         mime_type = "text/plain"
 
     parts: list[dict[str, Any]] = []
+    text_content = ""
     if mime_type == "text/plain" or (not file_bytes.startswith(b"%PDF-") and not mime_type.startswith("image/")):
-        text_preview = file_bytes.decode("utf-8", errors="ignore")[:4000]
-        parts.append({"text": f"{TRANSCRIPT_PROMPT}\n\nDocument text:\n{text_preview}"})
+        text_content = file_bytes.decode("utf-8", errors="ignore")[:4000]
+        parts.append({"text": f"{TRANSCRIPT_PROMPT}\n\nDocument text:\n{text_content}"})
     else:
         parts.append({"text": TRANSCRIPT_PROMPT})
         parts.append({
@@ -144,9 +192,34 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
         client = _get_http_client()
         resp = client.post(
             url,
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
             json={
                 "contents": [{"parts": parts}],
-                "generationConfig": {"responseMimeType": "application/json"}
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "object",
+                        "properties": {
+                            "student_name": {"type": "string"},
+                            "roll_number": {"type": "string"},
+                            "institution": {"type": "string"},
+                            "gpa": {"type": "number"},
+                            "percentage": {"type": "number"},
+                            "major": {"type": "string"},
+                            "academic_year": {"type": "string"},
+                            "bounding_boxes": {
+                                "type": "object",
+                                "properties": {
+                                    "student_name": {"type": "array", "items": {"type": "integer"}},
+                                    "roll_number": {"type": "array", "items": {"type": "integer"}},
+                                    "gpa": {"type": "array", "items": {"type": "integer"}},
+                                    "institution": {"type": "array", "items": {"type": "integer"}}
+                                }
+                            }
+                        },
+                        "required": ["student_name"]
+                    }
+                }
             }
         )
         if resp.status_code == 200:
@@ -156,20 +229,24 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
             pct = data.get("percentage")
             if gpa and not pct:
                 pct = (float(gpa) / 4.0) * 100.0 if float(gpa) <= 4.0 else float(gpa) * 9.5
+            clean_name = _clean_field_str(data.get("student_name"))
+            clean_roll = _clean_identifier(data.get("roll_number"))
+            clean_inst = _clean_field_str(data.get("institution"))
+            clean_major = _clean_field_str(data.get("major"))
             boxes = data.get("bounding_boxes") or {
-                "student_name": [120, 80, 160, 420],
-                "roll_number": [200, 80, 240, 360],
-                "gpa": [420, 80, 460, 340],
-                "institution": [160, 80, 200, 500]
+                "student_name": _compute_dynamic_line_bounding_box(text_content, clean_name, 1),
+                "roll_number": _compute_dynamic_line_bounding_box(text_content, clean_roll, 2),
+                "gpa": _compute_dynamic_line_bounding_box(text_content, gpa or pct, 3),
+                "institution": _compute_dynamic_line_bounding_box(text_content, clean_inst, 4)
             }
-            logger.info(f"Successfully parsed transcript with Gemini Flash AI: {data.get('student_name')}")
+            logger.info(f"Successfully parsed transcript with Gemini Flash AI: {clean_name}")
             return TranscriptExtractionResult(
-                student_name=data.get("student_name"),
-                roll_number=data.get("roll_number"),
-                institution=data.get("institution"),
+                student_name=clean_name,
+                roll_number=clean_roll,
+                institution=clean_inst,
                 gpa=float(gpa) if gpa is not None else None,
                 percentage=float(pct) if pct is not None else None,
-                major=data.get("major"),
+                major=clean_major,
                 confidence=0.98,
                 raw_text=raw_json,
                 bounding_boxes=boxes
@@ -184,8 +261,8 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
     api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash-lite"
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-flash-lite-latest"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
     lower_name = file_name.lower()
@@ -197,9 +274,10 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
         mime_type = "text/plain"
 
     parts: list[dict[str, Any]] = []
+    text_content = ""
     if mime_type == "text/plain" or (not file_bytes.startswith(b"%PDF-") and not mime_type.startswith("image/")):
-        text_preview = file_bytes.decode("utf-8", errors="ignore")[:4000]
-        parts.append({"text": f"{INCOME_PROMPT}\n\nDocument text:\n{text_preview}"})
+        text_content = file_bytes.decode("utf-8", errors="ignore")[:4000]
+        parts.append({"text": f"{INCOME_PROMPT}\n\nDocument text:\n{text_content}"})
     else:
         parts.append({"text": INCOME_PROMPT})
         parts.append({
@@ -213,30 +291,64 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
         client = _get_http_client()
         resp = client.post(
             url,
+            headers={"x-goog-api-key": api_key, "Content-Type": "application/json"},
             json={
                 "contents": [{"parts": parts}],
-                "generationConfig": {"responseMimeType": "application/json"}
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "responseSchema": {
+                        "type": "object",
+                        "properties": {
+                            "certificate_number": {"type": "string"},
+                            "applicant_name": {"type": "string"},
+                            "parent_or_guardian_name": {"type": "string"},
+                            "annual_income": {"type": "number"},
+                            "issuing_authority": {"type": "string"},
+                            "state": {"type": "string"},
+                            "district": {"type": "string"},
+                            "issue_date": {"type": "string"},
+                            "bounding_boxes": {
+                                "type": "object",
+                                "properties": {
+                                    "applicant_name": {"type": "array", "items": {"type": "integer"}},
+                                    "certificate_number": {"type": "array", "items": {"type": "integer"}},
+                                    "annual_income": {"type": "array", "items": {"type": "integer"}},
+                                    "issuing_authority": {"type": "array", "items": {"type": "integer"}}
+                                }
+                            }
+                        },
+                        "required": ["certificate_number", "annual_income"]
+                    }
+                }
             }
         )
         if resp.status_code == 200:
             raw_json = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
             data = json.loads(raw_json)
             income = data.get("annual_income")
+            clean_state = _clean_field_str(data.get("state"))
+            clean_dist = _clean_field_str(data.get("district"))
+            clean_name = _clean_field_str(data.get("applicant_name"))
+            clean_parent = _clean_field_str(data.get("parent_or_guardian_name"))
+            clean_cert = _clean_identifier(data.get("certificate_number"))
+            clean_auth = _clean_field_str(data.get("issuing_authority"))
+
             boxes = data.get("bounding_boxes") or {
-                "applicant_name": [140, 80, 180, 420],
-                "annual_income": [360, 80, 400, 380],
-                "certificate_number": [180, 80, 220, 460],
-                "issuing_authority": [480, 80, 520, 480]
+                "applicant_name": _compute_dynamic_line_bounding_box(text_content, clean_name, 1),
+                "annual_income": _compute_dynamic_line_bounding_box(text_content, income, 2),
+                "certificate_number": _compute_dynamic_line_bounding_box(text_content, clean_cert, 3),
+                "issuing_authority": _compute_dynamic_line_bounding_box(text_content, clean_auth, 4)
             }
-            logger.info(f"Successfully parsed income certificate with Gemini Flash AI: {data.get('applicant_name')} (INR {income})")
+
+            logger.info(f"Successfully parsed income certificate with Gemini Flash AI: {clean_name} (INR {income})")
             return IncomeCertificateExtractionResult(
-                certificate_number=data.get("certificate_number"),
-                applicant_name=data.get("applicant_name"),
-                parent_or_guardian_name=data.get("parent_or_guardian_name"),
+                certificate_number=clean_cert,
+                applicant_name=clean_name,
+                parent_or_guardian_name=clean_parent,
                 annual_income=float(income) if income is not None else None,
-                issuing_authority=data.get("issuing_authority"),
-                state=data.get("state"),
-                district=data.get("district"),
+                issuing_authority=clean_auth,
+                state=clean_state,
+                district=clean_dist,
                 issue_date=data.get("issue_date"),
                 valid_until=None,
                 confidence=0.98,
@@ -248,23 +360,40 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
     return None
 
 
-def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtractionResult:
+SUSPECT_TOOLS = (
+    "photoshop", "canva", "gimp", "illustrator", "pdfescape",
+    "sejda", "ilovepdf", "smallpdf", "pdf24", "nitro"
+)
+
+
+def _extract_pdf_text_and_meta(file_bytes: bytes) -> tuple[str, dict[str, Any]]:
+    """Streamlined single-pass PyPDF text and metadata extraction."""
+    try:
+        reader = PdfReader(io.BytesIO(file_bytes))
+        chunks = [t for page in reader.pages if (t := page.extract_text())]
+        meta = dict(reader.metadata) if reader.metadata else {}
+        return "\n".join(chunks), meta
+    except Exception as e:
+        logger.warning(f"Error reading PDF stream: {e}")
+        return "", {}
+
+
+def extract_transcript_data(
+    file_bytes: bytes,
+    file_name: str,
+    preloaded_text: str | None = None
+) -> TranscriptExtractionResult:
     """Extract academic and demographic fields from uploaded transcript using Gemini multimodal AI with streamlined heuristic fallback."""
     # 1. Primary: Gemini 3.5 Flash Multimodal Document Intelligence
+    # 1. Primary: Gemini 3.5 Flash Multimodal Document Intelligence
     gemini_result = extract_transcript_with_gemini(file_bytes, file_name)
-    if gemini_result and (gemini_result.gpa is not None or gemini_result.percentage is not None or gemini_result.student_name):
-        return gemini_result
 
     # 2. Optimized PyPDF fallback extraction
     text_content = ""
-    if file_bytes.startswith(b"%PDF-"):
-        try:
-            reader = PdfReader(io.BytesIO(file_bytes))
-            chunks = [page.extract_text() for page in reader.pages if page.extract_text()]
-            text_content = "\n".join(chunks)
-        except Exception as e:
-            logger.warning(f"Error reading PDF stream: {e}")
-            text_content = ""
+    if preloaded_text is not None:
+        text_content = preloaded_text
+    elif file_bytes.startswith(b"%PDF-"):
+        text_content, _ = _extract_pdf_text_and_meta(file_bytes)
     elif file_bytes.startswith((b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF")):
         # Image binary without PDF container
         text_content = ""
@@ -328,11 +457,35 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
         institution = inst_match.group(1).splitlines()[0].strip().rstrip(",.")
 
     boxes = {
-        "student_name": [120, 80, 160, 420],
-        "roll_number": [200, 80, 240, 360],
-        "gpa": [420, 80, 460, 340],
-        "institution": [160, 80, 200, 500]
+        "student_name": _compute_dynamic_line_bounding_box(text_content, student_name, 1),
+        "roll_number": _compute_dynamic_line_bounding_box(text_content, roll_no, 2),
+        "gpa": _compute_dynamic_line_bounding_box(text_content, gpa or percentage, 3),
+        "institution": _compute_dynamic_line_bounding_box(text_content, institution, 4)
     }
+
+    if gemini_result:
+        if gemini_result.gpa is None and gpa is not None:
+            gemini_result.gpa = gpa
+        if gemini_result.percentage is None and percentage is not None:
+            gemini_result.percentage = percentage
+        if student_name:
+            gemini_result.student_name = student_name
+        elif gemini_result.student_name:
+            gemini_result.student_name = _clean_field_str(gemini_result.student_name)
+        if roll_no:
+            gemini_result.roll_number = _clean_identifier(roll_no)
+        elif gemini_result.roll_number:
+            gemini_result.roll_number = _clean_identifier(gemini_result.roll_number)
+        if major:
+            gemini_result.major = major
+        elif gemini_result.major:
+            gemini_result.major = _clean_field_str(gemini_result.major)
+        if institution:
+            gemini_result.institution = institution
+        elif gemini_result.institution:
+            gemini_result.institution = _clean_field_str(gemini_result.institution)
+        return gemini_result
+
     return TranscriptExtractionResult(
         student_name=student_name,
         roll_number=roll_no,
@@ -346,23 +499,21 @@ def extract_transcript_data(file_bytes: bytes, file_name: str) -> TranscriptExtr
     )
 
 
-def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> IncomeCertificateExtractionResult:
+def extract_income_certificate_data(
+    file_bytes: bytes,
+    file_name: str,
+    preloaded_text: str | None = None
+) -> IncomeCertificateExtractionResult:
     """Extract annual income, certificate ID, and authority from uploaded income certificate using Gemini AI with fallback."""
     # 1. Primary: Gemini 3.5 Flash Multimodal Document Intelligence
     gemini_result = extract_income_certificate_with_gemini(file_bytes, file_name)
-    if gemini_result and (gemini_result.annual_income is not None or gemini_result.certificate_number):
-        return gemini_result
 
     # 2. Optimized PyPDF fallback extraction
     text_content = ""
-    if file_bytes.startswith(b"%PDF-"):
-        try:
-            reader = PdfReader(io.BytesIO(file_bytes))
-            chunks = [page.extract_text() for page in reader.pages if page.extract_text()]
-            text_content = "\n".join(chunks)
-        except Exception as e:
-            logger.warning(f"Error reading PDF stream: {e}")
-            text_content = ""
+    if preloaded_text is not None:
+        text_content = preloaded_text
+    elif file_bytes.startswith(b"%PDF-"):
+        text_content, _ = _extract_pdf_text_and_meta(file_bytes)
     elif file_bytes.startswith((b"\x89PNG", b"\xff\xd8\xff", b"GIF8", b"RIFF")):
         text_content = ""
     else:
@@ -429,11 +580,41 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
         issue_date = date_match.group(1).strip()
 
     boxes = {
-        "applicant_name": [140, 80, 180, 420],
-        "annual_income": [360, 80, 400, 380],
-        "certificate_number": [180, 80, 220, 460],
-        "issuing_authority": [480, 80, 520, 480]
+        "applicant_name": _compute_dynamic_line_bounding_box(text_content, applicant_name, 1),
+        "annual_income": _compute_dynamic_line_bounding_box(text_content, annual_income, 2),
+        "certificate_number": _compute_dynamic_line_bounding_box(text_content, cert_no, 3),
+        "issuing_authority": _compute_dynamic_line_bounding_box(text_content, authority, 4)
     }
+
+    if gemini_result:
+        if annual_income is not None:
+            gemini_result.annual_income = annual_income
+        if cert_no:
+            gemini_result.certificate_number = _clean_identifier(cert_no)
+        elif gemini_result.certificate_number:
+            gemini_result.certificate_number = _clean_identifier(gemini_result.certificate_number)
+        if applicant_name:
+            gemini_result.applicant_name = applicant_name
+        elif gemini_result.applicant_name:
+            gemini_result.applicant_name = _clean_field_str(gemini_result.applicant_name)
+        if parent_name:
+            gemini_result.parent_or_guardian_name = parent_name
+        elif gemini_result.parent_or_guardian_name:
+            gemini_result.parent_or_guardian_name = _clean_field_str(gemini_result.parent_or_guardian_name)
+        if state:
+            gemini_result.state = state
+        elif gemini_result.state:
+            gemini_result.state = _clean_field_str(gemini_result.state)
+        if district:
+            gemini_result.district = district
+        elif gemini_result.district:
+            gemini_result.district = _clean_field_str(gemini_result.district)
+        if authority:
+            gemini_result.issuing_authority = authority
+        elif gemini_result.issuing_authority:
+            gemini_result.issuing_authority = _clean_field_str(gemini_result.issuing_authority)
+        return gemini_result
+
     return IncomeCertificateExtractionResult(
         certificate_number=cert_no,
         applicant_name=applicant_name,
@@ -450,7 +631,11 @@ def extract_income_certificate_data(file_bytes: bytes, file_name: str) -> Income
     )
 
 
-def audit_pdf_integrity(file_bytes: bytes, file_name: str) -> DocumentIntegrityReport:
+def audit_pdf_integrity(
+    file_bytes: bytes,
+    file_name: str,
+    meta: dict[str, Any] | None = None
+) -> DocumentIntegrityReport:
     """Forensic metadata and cryptographic tamper detection for uploaded student documents."""
     if not file_bytes.startswith(b"%PDF-"):
         return DocumentIntegrityReport(
@@ -483,18 +668,18 @@ def audit_pdf_integrity(file_bytes: bytes, file_name: str) -> DocumentIntegrityR
         tamper_score += 0.45
         findings.append(f"Incremental PDF revision detected ({eof_count} %%EOF markers). Post-issuance byte injection suspected.")
 
-    # 3. Read metadata via PdfReader
+    # 3. Read metadata via PdfReader or reuse preloaded metadata
     try:
-        reader = PdfReader(io.BytesIO(file_bytes))
-        meta = reader.metadata or {}
+        if meta is None:
+            reader = PdfReader(io.BytesIO(file_bytes))
+            meta = dict(reader.metadata) if reader.metadata else {}
         producer = str(meta.get("/Producer") or meta.get("Producer") or "")
         creator = str(meta.get("/Creator") or meta.get("Creator") or "")
         creation_date = str(meta.get("/CreationDate") or meta.get("CreationDate") or "")
         mod_date = str(meta.get("/ModDate") or meta.get("ModDate") or "")
 
-        suspect_tools = ["photoshop", "canva", "gimp", "illustrator", "pdfescape", "sejda", "ilovepdf", "smallpdf", "pdf24", "nitro"]
         combined_tools = f"{producer.lower()} {creator.lower()}"
-        for tool in suspect_tools:
+        for tool in SUSPECT_TOOLS:
             if tool in combined_tools:
                 tamper_score += 0.60
                 findings.append(f"Consumer editing software detected in PDF metadata ('{tool}'). Uncertified manual alteration suspected.")
@@ -540,12 +725,22 @@ def extract_dual_documents(
     income_name: str,
 ) -> DualDocumentExtractionResult:
     """Jointly evaluate transcript and income certificate, performing cross-validation and building an auto-populated student profile."""
-    transcript_res = extract_transcript_data(transcript_bytes, transcript_name)
-    income_res = extract_income_certificate_data(income_bytes, income_name)
+    t_text = None
+    t_meta = None
+    if transcript_bytes.startswith(b"%PDF-"):
+        t_text, t_meta = _extract_pdf_text_and_meta(transcript_bytes)
+
+    i_text = None
+    i_meta = None
+    if income_bytes.startswith(b"%PDF-"):
+        i_text, i_meta = _extract_pdf_text_and_meta(income_bytes)
+
+    transcript_res = extract_transcript_data(transcript_bytes, transcript_name, preloaded_text=t_text)
+    income_res = extract_income_certificate_data(income_bytes, income_name, preloaded_text=i_text)
 
     # Forensic Integrity & Tamper Audit
-    t_integrity = audit_pdf_integrity(transcript_bytes, transcript_name)
-    i_integrity = audit_pdf_integrity(income_bytes, income_name)
+    t_integrity = audit_pdf_integrity(transcript_bytes, transcript_name, meta=t_meta)
+    i_integrity = audit_pdf_integrity(income_bytes, income_name, meta=i_meta)
 
     combined_score = max(t_integrity.tamper_score, i_integrity.tamper_score)
     is_quarantined = t_integrity.quarantine_active or i_integrity.quarantine_active
