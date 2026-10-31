@@ -70,8 +70,13 @@ class SessionManager:
 
         async with async_playwright() as pw, self._recording(case) as directory:
             endpoint = profile.get("cdp_endpoint")
+            low_mem_args = [
+                "--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+                "--disable-gpu", "--no-zygote", "--renderer-process-limit=1",
+                "--js-flags=--max-old-space-size=128", "--mute-audio"
+            ]
             browser = (await pw.chromium.connect_over_cdp(endpoint) if endpoint
-                       else await pw.chromium.launch(headless=True))
+                       else await pw.chromium.launch(headless=True, args=low_mem_args))
             try:
                 ctx = await browser.new_context(
                     viewport={"width": 1920, "height": 1080},

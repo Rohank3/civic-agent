@@ -40,6 +40,23 @@ class AgentControlPayload(BaseModel):
     mode: str | None = None
 
 
+CHROMIUM_LOW_MEM_ARGS = [
+    "--no-sandbox",
+    "--disable-setuid-sandbox",
+    "--disable-dev-shm-usage",
+    "--disable-gpu",
+    "--no-zygote",
+    "--renderer-process-limit=1",
+    "--js-flags=--max-old-space-size=128",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-client-side-phishing-detection",
+    "--disable-default-apps",
+    "--disable-extensions",
+    "--mute-audio"
+]
+
+
 async def run_live_agent_session(case_id: str, body: ServiceRequest):
     """Execute autonomous Playwright session with real-time WebSocket screencast and HITL signature pause."""
     from playwright.async_api import async_playwright
@@ -64,7 +81,7 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                args=CHROMIUM_LOW_MEM_ARGS
             )
             context = await browser.new_context(
                 viewport={"width": 1280, "height": 800},
