@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: civic-agent
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /healthz
+    envVars:
+      - key: PORT
+        value: "8000"
+      - key: CIVICAGENT_MODEL
+        value: "gemini-3.5-flash-lite"
+      - key: CIVICAGENT_GEMINI_API_KEY
+        sync: false
+      - key: CIVICAGENT_DATA_GOV_API_KEY
+        sync: false
