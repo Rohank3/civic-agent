@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { FileText, Monitor, Terminal } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { IntakeColumn } from './components/intake/IntakeColumn';
-import { InspectorDrawer } from './components/telemetry/InspectorDrawer';
 import { ViewportColumn } from './components/viewport/ViewportColumn';
+import { TraceColumn } from './components/telemetry/TraceColumn';
+import { InspectorDrawer } from './components/telemetry/InspectorDrawer';
 import { HitlModal } from './components/hitl/HitlModal';
 import { ReceiptModal } from './components/receipt/ReceiptModal';
 import { AddSchemeModal } from './components/intake/AddSchemeModal';
@@ -14,9 +16,7 @@ import type {
   CitizenUser,
   SchemeMatchResult, 
   DualDocumentExtractionResult, 
-  TelemetryEvent, 
   TrackingReceipt, 
-  ActorRole, 
   ScholarshipScheme,
   AppliedScholarship
 } from './types';
@@ -24,20 +24,27 @@ import { SAMPLE_PRESETS } from './lib/presets';
 import { 
   matchSchemes, 
   parseDualDocuments, 
-  submitDigitalSignature,
-  createCustomScheme,
-  deleteCustomScheme,
-  saveCitizenProfile,
-  getCitizenProfile,
-  getAppliedScholarships,
-  saveAppliedScholarship,
-  executeLiveService,
-  controlAgent,
-  syncSchemesFromGov,
-  getWsUrl
+  createCustomScheme, 
+  deleteCustomScheme, 
+  saveCitizenProfile, 
+  getCitizenProfile, 
+  getAppliedScholarships, 
+  saveAppliedScholarship, 
+  syncSchemesFromGov 
 } from './lib/api';
+import { 
+  executionStore, 
+  useExecutionStatus, 
+  useTelemetryEvents 
+} from './lib/executionStore';
+import { 
+  loadVault, 
+  saveVault, 
+  clearVault 
+} from './lib/cryptoVault';
 
 export const App: React.FC = () => {
+  // Current authenticated citizen user
   const [currentUser, setCurrentUser] = useState<CitizenUser | null>(() => {
     const stored = localStorage.getItem('civic_logged_in_user');
     if (stored) {
@@ -49,6 +56,8 @@ export const App: React.FC = () => {
     }
     return null;
   });
+
+  const [lang, setLang] = useState<'en' | 'hi'>('en');
 
   const userId = currentUser ? currentUser.id : 'user_anonymous';
 
@@ -85,86 +94,150 @@ export const App: React.FC = () => {
     return SAMPLE_PRESETS[0].profile;
   });
 
+  // Citizen documents and scheme matching
   const [dualDocResult, setDualDocResult] = useState<DualDocumentExtractionResult | null>(null);
   const [schemes, setSchemes] = useState<SchemeMatchResult[]>([]);
   const [selectedScheme, setSelectedScheme] = useState<ScholarshipScheme | null>(null);
   const [appliedList, setAppliedList] = useState<AppliedScholarship[]>([]);
+  const [uploadedDocuments, setUploadedDocuments] = useState<Array<{ name: string; kind: string; content: string }>>([]);
+  const [isVaultActive, setIsVaultActive] = useState<boolean>(false);
+  const [vaultDocNames, setVaultDocNames] = useState<{ transcript?: string; income?: string }>({});
 
-  const [events, setEvents] = useState<TelemetryEvent[]>([]);
-  const [currentStage, setCurrentStage] = useState<string>('IDLE');
-  const [activeActor, setActiveActor] = useState<ActorRole>('STUDENT_INTAKE');
-  const [pacingMode, setPacingMode] = useState<string>('1x');
-  const [currentStep, setCurrentStep] = useState<number>(1);
-  const [isExecuting, setIsExecuting] = useState<boolean>(false);
-  const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
-  const [isPaused, setIsPaused] = useState<boolean>(false);
-
+  // Modal dialog view states
   const [hitlOpen, setHitlOpen] = useState<boolean>(false);
-  const [receipt, setReceipt] = useState<TrackingReceipt | null>(null);
   const [receiptOpen, setReceiptOpen] = useState<boolean>(false);
-  const [wsConnected, setWsConnected] = useState<boolean>(false);
+  const [activeReceipt, setActiveReceipt] = useState<TrackingReceipt | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
   const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
   const [isAppliedModalOpen, setIsAppliedModalOpen] = useState<boolean>(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
-  const [uploadedDocuments, setUploadedDocuments] = useState<Array<{ name: string; kind: string; content: string }>>([]);
 
-  const caseIdRef = useRef<string>('case-2026-001');
-  const wsRef = useRef<WebSocket | null>(null);
-  const skipFlagRef = useRef<boolean>(false);
+  // Responsive mobile/tablet tab selector (360px - 1024px)
+  const [mobileTab, setMobileTab] = useState<'intake' | 'viewport' | 'trace'>('intake');
 
-  // Initialize live telemetry socket
+  // Fine-grained subscriptions to execution store
+  const executionStatus = useExecutionStatus();
+  const telemetryEvents = useTelemetryEvents();
+
+  // Register execution store callbacks for lifecycle gates
   useEffect(() => {
-    try {
-      const ws = new WebSocket(getWsUrl(caseIdRef.current));
-      ws.onopen = () => setWsConnected(true);
-      ws.onclose = () => setWsConnected(false);
-      wsRef.current = ws;
-      return () => ws.close();
-    } catch {
-      // ws connection standby
-    }
-  }, []);
+    executionStore.setCallbacks({
+      onHitl: () => {
+        setHitlOpen(true);
+      },
+      onSubmitted: (receipt, caseId) => {
+        setActiveReceipt(receipt);
+        setReceiptOpen(true);
 
-  // Initialize schemes and applied applications based on active user
+        const activeTarget = selectedScheme;
+        const appRecord: AppliedScholarship = {
+          id: `app_${Date.now()}`,
+          schemeId: activeTarget?.id || receipt.service_id,
+          schemeName: activeTarget?.name || receipt.scheme_title,
+          ministry: activeTarget?.ministry || receipt.ministry || 'State Authority',
+          grantAmount: activeTarget?.grant_amount_annual || receipt.grant_amount || 25000,
+          portalUrl: activeTarget?.portal_url || receipt.page_url || 'https://scholarships.gov.in',
+          trackingNumber: receipt.tracking_number,
+          caseId,
+          timestamp: receipt.timestamp || new Date().toISOString(),
+          status: 'SUBMITTED',
+          sha256Hash: receipt.sha256_hash,
+          receipt,
+          events: executionStore.getEvents(),
+        };
+
+        setAppliedList((prev) => [appRecord, ...prev]);
+        saveAppliedScholarship(userId, appRecord);
+      },
+    });
+  }, [selectedScheme, userId]);
+
+  // Initialize schemes, vault, and applied applications based on active user
   useEffect(() => {
+    let isCancelled = false;
+
     async function init() {
-      if (currentUser) {
-        // Load applied applications
-        const apps = await getAppliedScholarships(currentUser.id);
-        setAppliedList(apps);
+      // 1. Check Zero-Knowledge Client Vault for persisted documents and profile
+      try {
+        const vault = await loadVault(userId);
+        if (!isCancelled && vault) {
+          setIsVaultActive(true);
+          if (vault.profile) {
+            setProfile(vault.profile);
+          }
+          if (vault.dualDocResult) {
+            setDualDocResult(vault.dualDocResult);
+          }
+          const docs: Array<{ name: string; kind: string; content: string }> = [];
+          const names: { transcript?: string; income?: string } = {};
+          if (vault.documents.transcript) {
+            docs.push({
+              name: vault.documents.transcript.name,
+              kind: vault.documents.transcript.kind,
+              content: vault.documents.transcript.content,
+            });
+            names.transcript = vault.documents.transcript.name;
+          }
+          if (vault.documents.incomeCertificate) {
+            docs.push({
+              name: vault.documents.incomeCertificate.name,
+              kind: vault.documents.incomeCertificate.kind,
+              content: vault.documents.incomeCertificate.content,
+            });
+            names.income = vault.documents.incomeCertificate.name;
+          }
+          if (docs.length > 0) {
+            setUploadedDocuments(docs);
+            setVaultDocNames(names);
+          }
+        }
+      } catch (vaultErr) {
+        console.warn('Vault restore error:', vaultErr);
+      }
 
-        // Load persisted profile
+      if (currentUser) {
+        const apps = await getAppliedScholarships(currentUser.id);
+        if (!isCancelled) setAppliedList(apps);
+
         const persisted = await getCitizenProfile(currentUser.id);
-        if (persisted && persisted.full_name) {
+        if (!isCancelled && persisted && persisted.full_name) {
           setProfile(persisted);
           const matched = await matchSchemes(persisted, currentUser.id);
-          setSchemes(matched);
-          if (matched.length > 0) {
-            setSelectedScheme(matched[0].scheme);
+          if (!isCancelled) {
+            setSchemes(matched);
+            if (matched.length > 0) {
+              setSelectedScheme(matched[0].scheme);
+            }
           }
           return;
         }
       }
 
       const matched = await matchSchemes(profile, userId);
-      setSchemes(matched);
-      if (matched.length > 0) {
-        setSelectedScheme(matched[0].scheme);
+      if (!isCancelled) {
+        setSchemes(matched);
+        if (matched.length > 0) {
+          setSelectedScheme(matched[0].scheme);
+        }
       }
     }
+
     init();
+    return () => {
+      isCancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  const handleSyncLiveData = async () => {
+  // Memoized handlers to prevent child component re-render cascades
+  const handleSyncLiveData = useCallback(async () => {
     setIsSyncing(true);
     try {
       const res = await syncSchemesFromGov();
       const matched = await matchSchemes(profile, userId);
       setSchemes(matched);
-      addTelemetryEvent(
+      executionStore.addLocalEvent(
         'DATA_GOV_SYNCED',
         `Live synchronization confirmed with Data.gov.in (${res.schemes_count} statutory schemes verified, digest: ${res.digest}).`,
         'PREFLIGHT',
@@ -175,15 +248,14 @@ export const App: React.FC = () => {
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [profile, userId]);
 
-  const handleParseDocuments = async (
+  const handleParseDocuments = useCallback(async (
     transcript: string, 
     income: string, 
     transcriptName = 'academic_transcript.pdf', 
     incomeName = 'income_certificate.pdf'
   ) => {
-    // Preserve uploaded document payloads for live browser attachment
     setUploadedDocuments([
       { name: transcriptName, kind: transcriptName.toLowerCase().endsWith('.png') ? 'image' : 'pdf', content: transcript },
       { name: incomeName, kind: incomeName.toLowerCase().endsWith('.png') ? 'image' : 'pdf', content: income },
@@ -192,7 +264,6 @@ export const App: React.FC = () => {
     const res = await parseDualDocuments(transcript, income, transcriptName, incomeName);
     setDualDocResult(res);
 
-    // Merge non-empty extracted fields into active citizen profile
     const extracted = res.auto_populated_profile;
     const updated: CitizenProfile = {
       ...profile,
@@ -210,14 +281,51 @@ export const App: React.FC = () => {
 
     setProfile(updated);
     saveCitizenProfile(userId, updated);
+
+    // Seal documents and extracted credentials into user's Zero-Knowledge Vault
+    try {
+      await saveVault(userId, {
+        userId,
+        profile: updated,
+        documents: {
+          transcript: {
+            name: transcriptName,
+            kind: transcriptName.toLowerCase().endsWith('.png') ? 'image' : 'pdf',
+            content: transcript,
+            uploadedAt: new Date().toISOString(),
+          },
+          incomeCertificate: {
+            name: incomeName,
+            kind: incomeName.toLowerCase().endsWith('.png') ? 'image' : 'pdf',
+            content: income,
+            uploadedAt: new Date().toISOString(),
+          },
+        },
+        dualDocResult: res,
+        updatedAt: new Date().toISOString(),
+      });
+      setIsVaultActive(true);
+      setVaultDocNames({ transcript: transcriptName, income: incomeName });
+    } catch (vaultErr) {
+      console.warn('Failed to encrypt in vault:', vaultErr);
+    }
+
     const matched = await matchSchemes(updated, userId);
     setSchemes(matched);
     if (matched.length > 0) {
       setSelectedScheme(matched[0].scheme);
     }
-  };
+  }, [profile, userId]);
 
-  const handleSaveEditedProfile = async (updated: CitizenProfile) => {
+  const handleClearVault = useCallback(async () => {
+    await clearVault(userId);
+    setIsVaultActive(false);
+    setUploadedDocuments([]);
+    setVaultDocNames({});
+    setDualDocResult(null);
+  }, [userId]);
+
+  const handleSaveEditedProfile = useCallback(async (updated: CitizenProfile) => {
     setProfile(updated);
     saveCitizenProfile(userId, updated);
     if (currentUser && currentUser.fullName !== updated.full_name) {
@@ -234,9 +342,9 @@ export const App: React.FC = () => {
     if (matched.length > 0 && (!selectedScheme || !matched.some(m => m.scheme.id === selectedScheme.id))) {
       setSelectedScheme(matched[0].scheme);
     }
-  };
+  }, [currentUser, selectedScheme, userId]);
 
-  const handleCreateCustomScheme = async (schemeData: Partial<ScholarshipScheme>) => {
+  const handleCreateCustomScheme = useCallback(async (schemeData: Partial<ScholarshipScheme>) => {
     const newScheme = await createCustomScheme(schemeData, userId);
     const matched = await matchSchemes(profile, userId);
     setSchemes(matched);
@@ -244,71 +352,19 @@ export const App: React.FC = () => {
     if (found) {
       setSelectedScheme(found.scheme);
     }
-  };
+  }, [profile, userId]);
 
-  const handleDeleteCustomScheme = async (schemeId: string) => {
+  const handleDeleteCustomScheme = useCallback(async (schemeId: string) => {
     await deleteCustomScheme(schemeId, userId);
     const matched = await matchSchemes(profile, userId);
     setSchemes(matched);
     if (selectedScheme?.id === schemeId && matched.length > 0) {
       setSelectedScheme(matched[0].scheme);
     }
-  };
+  }, [profile, selectedScheme, userId]);
 
-  const addTelemetryEvent = (
-    action: string,
-    details: string,
-    stage: string,
-    actor: ActorRole,
-    step?: number,
-    fields?: number
-  ) => {
-    const newEvent: TelemetryEvent = {
-      type: 'telemetry',
-      case_id: caseIdRef.current,
-      timestamp: new Date().toISOString(),
-      actor,
-      stage,
-      action,
-      details,
-      step: step || currentStep,
-      fields_filled: fields,
-      pacing_mode: pacingMode,
-    };
-    setEvents((prev) => [...prev, newEvent]);
-    setCurrentStage(stage);
-    setActiveActor(actor);
-  };
-
-  const handleTogglePause = () => {
-    if (isPaused) {
-      controlAgent(caseIdRef.current, 'resume');
-      setIsPaused(false);
-      addTelemetryEvent('EXECUTION_RESUMED', 'Operator resumed autonomous agent execution.', currentStage, activeActor);
-    } else {
-      controlAgent(caseIdRef.current, 'pause');
-      setIsPaused(true);
-      addTelemetryEvent('EXECUTION_PAUSED', 'Operator paused autonomous agent execution.', currentStage, activeActor);
-    }
-  };
-
-  const handleStepAdvance = () => {
-    controlAgent(caseIdRef.current, 'step');
-    addTelemetryEvent('STEP_SIGNALLED', 'Manual step-by-step advance triggered by operator.', currentStage, activeActor);
-  };
-
-  const handleSkipTyping = () => {
-    controlAgent(caseIdRef.current, 'skip');
-    addTelemetryEvent(
-      'CHAPTER_CUT_ACTIVATED',
-      'Fast-forward triggered: skipping typing delay on active page.',
-      currentStage,
-      activeActor
-    );
-  };
-
-  const handleDigiLockerBypass = () => {
-    addTelemetryEvent(
+  const handleDigiLockerBypass = useCallback(() => {
+    executionStore.addLocalEvent(
       'DIGILOCKER_AUTH_INITIATED',
       'Redirecting to MeriPehchaan / NSSO OAuth2 gateway. Authenticating Aadhaar OTP for trusted direct document fetch...',
       'PREFLIGHT',
@@ -336,19 +392,19 @@ export const App: React.FC = () => {
         warnings: dualDocResult.warnings.filter(w => !w.includes('QUARANTINE') && !w.includes('SECURITY'))
       };
       setDualDocResult(cleared);
-      addTelemetryEvent(
+      executionStore.addLocalEvent(
         'DIGILOCKER_DOCS_VERIFIED',
         'Official statutory documents successfully ingested directly from DigiLocker repository with valid X.509 signature. Quarantine lifted.',
         'PREFLIGHT',
         'STUDENT_INTAKE'
       );
     }
-  };
+  }, [dualDocResult]);
 
-  const handleSelectSchemeAndExecute = async (match: SchemeMatchResult) => {
-    if (isExecuting) return;
+  const handleSelectSchemeAndExecute = useCallback(async (match: SchemeMatchResult) => {
+    if (executionStatus.isExecuting) return;
     if (dualDocResult?.integrity_report?.quarantine_active) {
-      addTelemetryEvent(
+      executionStore.addLocalEvent(
         'EXECUTION_BLOCKED_QUARANTINE',
         'Execution blocked: Pre-flight document integrity quarantine active. Anomaly detected in document structure/metadata. Please resolve via DigiLocker direct pull.',
         'PREFLIGHT',
@@ -357,163 +413,57 @@ export const App: React.FC = () => {
       alert('Execution Blocked: Pre-flight document integrity quarantine active. Anomaly detected in document structure/metadata. Please resolve via DigiLocker direct pull under Section 199/200 IPC.');
       return;
     }
-    setIsExecuting(true);
+
     setSelectedScheme(match.scheme);
-    setCurrentStep(1);
-    setReceipt(null);
-    setCurrentScreenshot(null);
-    setIsPaused(false);
-    skipFlagRef.current = false;
-    setEvents([]);
+    setActiveReceipt(null);
 
-    const newCaseId = `case-${Date.now().toString(36)}`;
-    caseIdRef.current = newCaseId;
+    // On mobile / tablet viewports, smoothly navigate user to Live Viewport
+    setMobileTab('viewport');
 
-    // Connect WebSocket for live telemetry & screencast streaming
-    try {
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
-      const ws = new WebSocket(getWsUrl(newCaseId));
-      wsRef.current = ws;
+    await executionStore.startExecution(match.scheme, profile, uploadedDocuments);
+  }, [dualDocResult, executionStatus.isExecuting, profile, uploadedDocuments]);
 
-      ws.onopen = () => {
-        setWsConnected(true);
-      };
-
-      ws.onmessage = (evt) => {
-        try {
-          const msg = JSON.parse(evt.data);
-          if (msg.type === 'telemetry') {
-            const eventItem: TelemetryEvent = {
-              type: 'telemetry',
-              case_id: msg.case_id || newCaseId,
-              timestamp: new Date().toISOString(),
-              actor: (msg.actor as ActorRole) || 'AUTONOMOUS_AGENT',
-              stage: msg.stage || 'NAVIGATING',
-              action: msg.action || 'STEP',
-              details: msg.details || '',
-              step: msg.step || 1,
-              fields_filled: msg.fields_filled,
-              screenshot: msg.screenshot,
-              pacing_mode: '1x',
-            };
-
-            setEvents((prev) => [...prev, eventItem]);
-
-            if (msg.stage) setCurrentStage(msg.stage);
-            if (msg.actor) setActiveActor(msg.actor as ActorRole);
-            if (msg.step) setCurrentStep(msg.step);
-            if (msg.screenshot) setCurrentScreenshot(msg.screenshot);
-
-            // Handle HITL Signature gate pause
-            if (msg.stage === 'AWAITING_CITIZEN_REVIEW' || msg.action === 'AWAITING_CITIZEN_SIGNATURE') {
-              setHitlOpen(true);
-            }
-
-            // Handle Final Submission Receipt
-            if (msg.stage === 'SUBMITTED' && msg.receipt) {
-              setReceipt(msg.receipt);
-              setIsExecuting(false);
-              setReceiptOpen(true);
-
-              const appRecord: AppliedScholarship = {
-                id: `app_${Date.now()}`,
-                schemeId: match.scheme.id,
-                schemeName: match.scheme.name,
-                ministry: match.scheme.ministry,
-                grantAmount: match.scheme.grant_amount_annual,
-                portalUrl: match.scheme.portal_url,
-                trackingNumber: msg.receipt.tracking_number,
-                caseId: newCaseId,
-                timestamp: msg.receipt.timestamp || new Date().toISOString(),
-                status: 'SUBMITTED',
-                sha256Hash: msg.receipt.sha256_hash,
-                receipt: msg.receipt,
-                events: [...events, eventItem],
-              };
-              setAppliedList((prev) => [appRecord, ...prev]);
-              saveAppliedScholarship(userId, appRecord);
-            }
-
-            if (msg.stage === 'ERROR') {
-              setIsExecuting(false);
-            }
-          }
-        } catch (e) {
-          console.warn('Telemetry WS parse error:', e);
-        }
-      };
-
-      ws.onclose = () => {
-        setWsConnected(false);
-        // Automatic exponential reconnect if session still executing
-        if (caseIdRef.current === newCaseId) {
-          setTimeout(() => {
-            if (caseIdRef.current === newCaseId && wsRef.current?.readyState !== WebSocket.OPEN) {
-              try {
-                const retryWs = new WebSocket(getWsUrl(newCaseId));
-                wsRef.current = retryWs;
-                retryWs.onopen = () => setWsConnected(true);
-                retryWs.onmessage = ws.onmessage;
-                retryWs.onclose = ws.onclose;
-              } catch {
-                // ignore
-              }
-            }
-          }, 1500);
-        }
-      };
-    } catch (e) {
-      console.warn('WS initialization error:', e);
-    }
-
-    // Launch Genuine Playwright Browser Execution Session
-    try {
-      await executeLiveService({
-        service_id: match.scheme.id,
-        portal_url: match.scheme.portal_url,
-        profile: profile,
-        documents: uploadedDocuments,
-      });
-    } catch (e) {
-      console.error('Failed to launch live Playwright agent:', e);
-      addTelemetryEvent(
-        'EXECUTION_FALLBACK',
-        'Backend connection offline. Please ensure API gateway is running on :8000 via run_dev.bat.',
-        'ERROR',
-        'AUTONOMOUS_AGENT'
-      );
-      setIsExecuting(false);
-    }
-  };
-
-  const handleAuthorizeSubmission = async (signatureDataUrl: string) => {
+  const handleAuthorizeSubmission = useCallback(async (signatureDataUrl: string) => {
     setHitlOpen(false);
+    await executionStore.authorizeSignature(signatureDataUrl);
+  }, []);
 
-    addTelemetryEvent(
-      'SIGNATURE_AUTHORIZED',
-      'Citizen digital signature received and verified. Signaling Playwright agent to commit final submission.',
-      'SUBMITTING',
-      'CITIZEN_HITL',
-      currentStep
-    );
-
-    // Signals the live agent in backend to commit and extract receipt
-    await submitDigitalSignature(caseIdRef.current, signatureDataUrl);
-  };
-
-  const handleReset = () => {
-    setIsExecuting(false);
-    setCurrentStage('IDLE');
-    setActiveActor('STUDENT_INTAKE');
-    setCurrentStep(1);
-    setEvents([]);
-    setReceipt(null);
+  const handleReset = useCallback(() => {
+    executionStore.reset();
+    setActiveReceipt(null);
     setHitlOpen(false);
     setReceiptOpen(false);
-    caseIdRef.current = `case-${Date.now().toString().slice(-6)}`;
-  };
+    setMobileTab('intake');
+  }, []);
+
+  const handleTogglePause = useCallback(() => {
+    executionStore.togglePause();
+  }, []);
+
+  const handleStepAdvance = useCallback(() => {
+    executionStore.stepAdvance();
+  }, []);
+
+  const handleSkipTyping = useCallback(() => {
+    executionStore.skipTyping();
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    localStorage.removeItem('civic_logged_in_user');
+    setCurrentUser(null);
+  }, []);
+
+  const handleOpenReceiptModal = useCallback(() => {
+    if (executionStatus.receipt || activeReceipt) {
+      setReceiptOpen(true);
+    }
+  }, [activeReceipt, executionStatus.receipt]);
+
+  // Derived effective receipt for the ReceiptModal
+  const currentReceipt = useMemo(
+    () => executionStatus.receipt || activeReceipt,
+    [executionStatus.receipt, activeReceipt]
+  );
 
   if (!currentUser) {
     return (
@@ -573,78 +523,139 @@ export const App: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30">
-      {/* Top Navigation */}
+    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30 overflow-x-hidden">
+      {/* Top Navigation Bar */}
       <Navbar
-        wsConnected={wsConnected}
-        activeActor={activeActor}
+        wsConnected={executionStatus.wsConnected}
+        activeActor={executionStatus.activeActor}
         onReset={handleReset}
         currentUser={currentUser}
-        onLogout={() => {
-          localStorage.removeItem('civic_logged_in_user');
-          setCurrentUser(null);
-        }}
+        onLogout={handleLogout}
         onEditProfile={() => setIsEditProfileOpen(true)}
         appliedCount={appliedList.length}
         onOpenApplied={() => setIsAppliedModalOpen(true)}
         isInspectorOpen={isInspectorOpen}
         onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
-        eventCount={events.length}
+        eventCount={telemetryEvents.length}
         onSyncLiveData={handleSyncLiveData}
         isSyncing={isSyncing}
+        lang={lang}
+        onToggleLang={() => setLang((prev) => (prev === 'en' ? 'hi' : 'en'))}
       />
 
-      {/* Modern 2-Column Cockpit Layout (Simplified & Focused) */}
-      <main className="flex-1 p-3 sm:p-4 max-w-[1920px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch min-h-[calc(100vh-65px)]">
-        {/* Column 1: Citizen Intake Panel & Statutory Scheme Matcher */}
-        <section className="lg:col-span-5 h-[85vh] min-h-[500px] flex flex-col">
-          <IntakeColumn
-            profile={profile}
-            dualDocResult={dualDocResult}
-            onParseDocuments={handleParseDocuments}
-            schemes={schemes}
-            onSelectSchemeAndExecute={handleSelectSchemeAndExecute}
-            isExecuting={isExecuting}
-            onOpenAddModal={() => setIsAddModalOpen(true)}
-            onDeleteCustomScheme={handleDeleteCustomScheme}
-            onOpenEditProfile={() => setIsEditProfileOpen(true)}
-            appliedCount={appliedList.length}
-            onOpenAppliedModal={() => setIsAppliedModalOpen(true)}
-            onVerifyDigiLocker={handleDigiLockerBypass}
-          />
-        </section>
+      {/* Main Cockpit Layout */}
+      <main className="flex-1 p-2 sm:p-4 max-w-[1920px] mx-auto w-full flex flex-col min-h-[calc(100vh-65px)]">
+        {/* Mobile & Tablet Responsive View Switcher (360px - 1279px) */}
+        <div className="xl:hidden flex items-center p-1 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-md gap-1">
+          <button
+            type="button"
+            onClick={() => setMobileTab('intake')}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+              mobileTab === 'intake'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>1. Intake</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('viewport')}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+              mobileTab === 'viewport'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Monitor className="w-4 h-4" />
+            <span>2. Viewport</span>
+            {executionStatus.isExecuting && (
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobileTab('trace')}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
+              mobileTab === 'trace'
+                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+            }`}
+          >
+            <Terminal className="w-4 h-4" />
+            <span>3. Trace</span>
+            {telemetryEvents.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 border border-slate-700 text-blue-300 font-mono">
+                {telemetryEvents.length}
+              </span>
+            )}
+          </button>
+        </div>
 
-        {/* Column 2: Live Viewport Screencast, Anti-Bot Controls & HITL Gate */}
-        <section className="lg:col-span-7 h-[85vh] min-h-[500px] flex flex-col">
-          <ViewportColumn
-            currentStage={currentStage}
-            activeActor={activeActor}
-            pacingMode={pacingMode}
-            setPacingMode={setPacingMode}
-            onSkipTyping={handleSkipTyping}
-            screenshotBase64={currentScreenshot}
-            currentStep={currentStep}
-            profile={profile}
-            selectedScheme={selectedScheme}
-            isExecuting={isExecuting}
-            onTriggerHitlSignoff={() => setHitlOpen(true)}
-            receipt={receipt}
-            onOpenReceipt={() => setReceiptOpen(true)}
-            isPaused={isPaused}
-            onTogglePause={handleTogglePause}
-            onStepAdvance={handleStepAdvance}
-          />
-        </section>
+        {/* 3-Column Responsive Cockpit Grid */}
+        <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch min-h-[580px]">
+          {/* Column 1: Citizen Intake & Statutory Scheme Matcher */}
+          <section className={`xl:col-span-4 h-[calc(100vh-140px)] xl:h-[calc(100vh-95px)] min-h-[540px] flex flex-col ${
+            mobileTab === 'intake' ? 'flex' : 'hidden xl:flex'
+          }`}>
+            <IntakeColumn
+              profile={profile}
+              dualDocResult={dualDocResult}
+              onParseDocuments={handleParseDocuments}
+              schemes={schemes}
+              onSelectSchemeAndExecute={handleSelectSchemeAndExecute}
+              isExecuting={executionStatus.isExecuting}
+              onOpenAddModal={() => setIsAddModalOpen(true)}
+              onDeleteCustomScheme={handleDeleteCustomScheme}
+              onOpenEditProfile={() => setIsEditProfileOpen(true)}
+              appliedCount={appliedList.length}
+              onOpenAppliedModal={() => setIsAppliedModalOpen(true)}
+              onVerifyDigiLocker={handleDigiLockerBypass}
+              isVaultActive={isVaultActive}
+              vaultDocumentNames={vaultDocNames}
+              onClearVault={handleClearVault}
+            />
+          </section>
+
+          {/* Column 2: Live Viewport Screencast & Anti-Bot Controls */}
+          <section className={`xl:col-span-5 h-[calc(100vh-140px)] xl:h-[calc(100vh-95px)] min-h-[540px] flex flex-col ${
+            mobileTab === 'viewport' ? 'flex' : 'hidden xl:flex'
+          }`}>
+            <ViewportColumn
+              currentStage={executionStatus.currentStage}
+              activeActor={executionStatus.activeActor}
+              selectedScheme={selectedScheme}
+              isExecuting={executionStatus.isExecuting}
+              receipt={currentReceipt}
+              onOpenReceipt={handleOpenReceiptModal}
+              isPaused={executionStatus.isPaused}
+              onTogglePause={handleTogglePause}
+              onStepAdvance={handleStepAdvance}
+              onSkipTyping={handleSkipTyping}
+            />
+          </section>
+
+          {/* Column 3: Agent Reasoning Trace & Telemetry Stream */}
+          <section className={`xl:col-span-3 h-[calc(100vh-140px)] xl:h-[calc(100vh-95px)] min-h-[540px] flex flex-col ${
+            mobileTab === 'trace' ? 'flex' : 'hidden xl:flex'
+          }`}>
+            <TraceColumn
+              events={telemetryEvents}
+              currentStage={executionStatus.currentStage}
+            />
+          </section>
+        </div>
       </main>
 
-      {/* Slide-over AI Reasoning & Telemetry Inspector (Collapsible Judge View) */}
+      {/* Slide-over Deep AI Reasoning & Telemetry Inspector (Judge View) */}
       <InspectorDrawer
         isOpen={isInspectorOpen}
         onClose={() => setIsInspectorOpen(false)}
-        events={events}
-        currentStage={currentStage}
-        activeActor={activeActor}
-        wsConnected={wsConnected}
+        events={telemetryEvents}
+        currentStage={executionStatus.currentStage}
+        activeActor={executionStatus.activeActor}
+        wsConnected={executionStatus.wsConnected}
       />
 
       {/* Applied Scholarships Registry Modal */}
@@ -653,7 +664,7 @@ export const App: React.FC = () => {
         onClose={() => setIsAppliedModalOpen(false)}
         applications={appliedList}
         onOpenReceipt={(r) => {
-          setReceipt(r);
+          setActiveReceipt(r);
           setReceiptOpen(true);
         }}
         onReplayRecording={(app) => {
@@ -662,10 +673,9 @@ export const App: React.FC = () => {
             setSelectedScheme(found.scheme);
           }
           if (app.receipt) {
-            setReceipt(app.receipt);
+            setActiveReceipt(app.receipt);
           }
-          setCurrentStep(3);
-          setCurrentStage('SUBMITTED');
+          setMobileTab('viewport');
         }}
       />
 
@@ -677,7 +687,7 @@ export const App: React.FC = () => {
         onSave={handleSaveEditedProfile}
       />
 
-      {/* Human-in-the-Loop Sign-off Modal */}
+      {/* Human-in-the-Loop Sign-off Gate Modal */}
       <HitlModal
         isOpen={hitlOpen}
         onClose={() => setHitlOpen(false)}
@@ -688,7 +698,7 @@ export const App: React.FC = () => {
 
       {/* Cryptographic Receipt & PDF Export Modal */}
       <ReceiptModal
-        receipt={receiptOpen ? receipt : null}
+        receipt={receiptOpen ? currentReceipt : null}
         onClose={() => setReceiptOpen(false)}
       />
 

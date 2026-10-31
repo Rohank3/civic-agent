@@ -14,7 +14,6 @@ import {
   Copy
 } from 'lucide-react';
 import type { AppliedScholarship, TrackingReceipt } from '../../types';
-import { generateReceiptPdf } from '../../lib/receiptPdf';
 
 interface AppliedScholarshipsModalProps {
   isOpen: boolean;
@@ -209,7 +208,10 @@ export const AppliedScholarshipsModal: React.FC<AppliedScholarshipsModalProps> =
 
                       <button
                         type="button"
-                        onClick={() => generateReceiptPdf(app.receipt!)}
+                        onClick={async () => {
+                          const { generateReceiptPdf } = await import('../../lib/receiptPdf');
+                          await generateReceiptPdf(app.receipt!);
+                        }}
                         className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white text-xs font-semibold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                       >
                         <Download className="w-3.5 h-3.5" />

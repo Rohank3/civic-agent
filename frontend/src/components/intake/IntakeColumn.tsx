@@ -42,9 +42,12 @@ interface IntakeColumnProps {
   appliedCount?: number;
   onOpenAppliedModal?: () => void;
   onVerifyDigiLocker?: () => void;
+  isVaultActive?: boolean;
+  vaultDocumentNames?: { transcript?: string; income?: string };
+  onClearVault?: () => void;
 }
 
-export const IntakeColumn: React.FC<IntakeColumnProps> = ({
+export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
   profile,
   dualDocResult,
   onParseDocuments,
@@ -57,13 +60,22 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
   appliedCount = 0,
   onOpenAppliedModal,
   onVerifyDigiLocker,
+  isVaultActive = false,
+  vaultDocumentNames,
+  onClearVault,
 }) => {
   const [showTestPersonas, setShowTestPersonas] = useState<boolean>(false);
   const [showProfileDetails, setShowProfileDetails] = useState<boolean>(true);
   const [isParsing, setIsParsing] = useState<boolean>(false);
   
-  const [uploadedTranscriptName, setUploadedTranscriptName] = useState<string | null>(null);
-  const [uploadedIncomeName, setUploadedIncomeName] = useState<string | null>(null);
+  const [manualTranscriptName, setManualTranscriptName] = useState<string | null>(null);
+  const [manualIncomeName, setManualIncomeName] = useState<string | null>(null);
+
+  const uploadedTranscriptName = manualTranscriptName || vaultDocumentNames?.transcript || null;
+  const uploadedIncomeName = manualIncomeName || vaultDocumentNames?.income || null;
+
+  const setUploadedTranscriptName = (name: string | null) => setManualTranscriptName(name);
+  const setUploadedIncomeName = (name: string | null) => setManualIncomeName(name);
 
   const transcriptInputRef = useRef<HTMLInputElement | null>(null);
   const incomeInputRef = useRef<HTMLInputElement | null>(null);
@@ -176,7 +188,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
     }
   };
 
-  const sufficiency = dualDocResult ? dualDocResult.sufficiency_score * 100 : 95;
+  const sufficiency = dualDocResult ? Math.round(dualDocResult.sufficiency_score * 100) : null;
 
   return (
     <div className="flex flex-col h-full bg-slate-900/60 rounded-xl border border-slate-800 overflow-hidden font-sans">
@@ -210,6 +222,40 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           className="hidden"
           onChange={handleIncomeFileChange}
         />
+
+        {/* Zero-Knowledge Vault Active Banner */}
+        {isVaultActive && (
+          <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/40 flex items-center justify-between gap-2 shadow-sm animate-in fade-in">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-semibold text-xs text-white">
+                    Zero-Knowledge Vault Active
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">
+                    AES-256-GCM
+                  </span>
+                </div>
+                <span className="text-[10px] text-emerald-300/90 block">
+                  Documents encrypted in local vault • Reusable across all applications without re-uploading
+                </span>
+              </div>
+            </div>
+            {onClearVault && (
+              <button
+                type="button"
+                onClick={onClearVault}
+                className="px-2 py-1 text-[10px] rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 font-medium"
+                title="Wipe cached documents from local encrypted vault"
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Multimodal Document Upload Cards */}
         <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/40 space-y-3">
@@ -309,17 +355,21 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           {/* Sufficiency Score Gauge */}
           <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-700/40">
             <span className="text-slate-400">Pre-flight Sufficiency Score:</span>
-            <div className="flex items-center gap-1.5">
-              <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    sufficiency >= 80 ? 'bg-emerald-500' : 'bg-amber-500'
-                  }`}
-                  style={{ width: `${sufficiency}%` }}
-                />
+            {sufficiency !== null ? (
+              <div className="flex items-center gap-1.5">
+                <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      sufficiency >= 80 ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
+                    style={{ width: `${sufficiency}%` }}
+                  />
+                </div>
+                <span className="font-bold text-emerald-400 text-xs">{sufficiency}%</span>
               </div>
-              <span className="font-bold text-emerald-400 text-xs">{sufficiency.toFixed(0)}%</span>
-            </div>
+            ) : (
+              <span className="text-[11px] text-slate-500 italic">Upload documents to verify</span>
+            )}
           </div>
 
           {/* Warning notifications if fields missing */}
@@ -662,4 +712,6 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
       </div>
     </div>
   );
-};
+});
+
+IntakeColumn.displayName = 'IntakeColumn';

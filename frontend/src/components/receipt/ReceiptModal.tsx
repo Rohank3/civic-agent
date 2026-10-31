@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import type { TrackingReceipt } from '../../types';
-import { generateReceiptPdf } from '../../lib/receiptPdf';
 
 interface ReceiptModalProps {
   receipt: TrackingReceipt | null;
@@ -44,8 +43,9 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownloadPdf = () => {
-    generateReceiptPdf(receipt);
+  const handleDownloadPdf = async () => {
+    const { generateReceiptPdf } = await import('../../lib/receiptPdf');
+    await generateReceiptPdf(receipt);
   };
 
   const handleDownloadJson = () => {
@@ -130,6 +130,19 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Privacy Preservation Guarantee Callout */}
+          <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-emerald-300">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>
+                <strong>Privacy-Preserved Official Export:</strong> Street address & sensitive national IDs are redacted in exported proofs.
+              </span>
+            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+              DPDP & GDPR
+            </span>
           </div>
 
           {/* Cryptographic SHA-256 Proof */}

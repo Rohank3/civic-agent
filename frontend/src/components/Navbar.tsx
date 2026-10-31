@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut, Award, Terminal } from 'lucide-react';
+import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut, Award, Terminal, Languages } from 'lucide-react';
 import type { ActorRole, CitizenUser } from '../types';
 
 interface NavbarProps {
@@ -16,9 +16,11 @@ interface NavbarProps {
   eventCount?: number;
   onSyncLiveData?: () => void;
   isSyncing?: boolean;
+  lang?: 'en' | 'hi';
+  onToggleLang?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ 
+export const Navbar: React.FC<NavbarProps> = React.memo(({ 
   wsConnected, 
   activeActor, 
   onReset,
@@ -32,6 +34,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   eventCount = 0,
   onSyncLiveData,
   isSyncing = false,
+  lang = 'en',
+  onToggleLang,
 }) => {
   const getActorBadge = () => {
     switch (activeActor) {
@@ -135,6 +139,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>New Case</span>
           </button>
 
+          {/* Vernacular Language Switcher */}
+          {onToggleLang && (
+            <button
+              type="button"
+              onClick={onToggleLang}
+              className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 text-xs font-medium text-slate-200 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              title="Toggle Vernacular Language (English / हिंदी)"
+            >
+              <Languages className="w-3.5 h-3.5 text-amber-400" />
+              <span>{lang === 'hi' ? 'हिंदी (सक्रिय)' : 'English'}</span>
+            </button>
+          )}
+
           {/* Applied Scholarships Registry Button */}
           {onOpenApplied && (
             <button
@@ -176,4 +193,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
     </header>
   );
-};
+});
+
+Navbar.displayName = 'Navbar';
