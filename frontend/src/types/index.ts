@@ -89,6 +89,18 @@ export interface IncomeCertificateData {
   raw_text?: string | null;
 }
 
+export interface DocumentIntegrityReport {
+  status: 'VERIFIED' | 'CLEAN' | 'TAMPER_SUSPECTED';
+  quarantine_active: boolean;
+  producer?: string | null;
+  creator?: string | null;
+  modification_divergence?: boolean;
+  has_digital_signature?: boolean;
+  forensic_findings: string[];
+  tamper_score: number;
+  recommended_action: 'PROCEED' | 'DIGILOCKER_PULL' | 'MANUAL_REVIEW';
+}
+
 export interface DualDocumentExtractionResult {
   transcript: TranscriptData;
   income_certificate: IncomeCertificateData;
@@ -98,6 +110,7 @@ export interface DualDocumentExtractionResult {
   sufficiency_score: number;
   warnings: string[];
   auto_populated_profile: CitizenProfile;
+  integrity_report?: DocumentIntegrityReport | null;
 }
 
 export type ActorRole = 

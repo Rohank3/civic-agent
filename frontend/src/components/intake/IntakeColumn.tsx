@@ -15,7 +15,9 @@ import {
   KeyRound,
   Globe,
   Edit2,
-  AlertTriangle
+  AlertTriangle,
+  ShieldAlert,
+  ExternalLink
 } from 'lucide-react';
 import type { CitizenProfile, SchemeMatchResult, DualDocumentExtractionResult } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
@@ -38,6 +40,7 @@ interface IntakeColumnProps {
   onOpenEditProfile: () => void;
   appliedCount?: number;
   onOpenAppliedModal?: () => void;
+  onVerifyDigiLocker?: () => void;
 }
 
 export const IntakeColumn: React.FC<IntakeColumnProps> = ({
@@ -52,6 +55,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
   onOpenEditProfile,
   appliedCount = 0,
   onOpenAppliedModal,
+  onVerifyDigiLocker,
 }) => {
   const [showTestPersonas, setShowTestPersonas] = useState<boolean>(false);
   const [showProfileDetails, setShowProfileDetails] = useState<boolean>(true);
@@ -270,6 +274,67 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               {dualDocResult.warnings.map((w, idx) => (
                 <p key={idx} className="text-[10px] text-amber-200/90 pl-4 list-disc">• {w}</p>
               ))}
+            </div>
+          )}
+
+          {/* Forensic Integrity & Tamper Protection Badge */}
+          {dualDocResult?.integrity_report && (
+            <div
+              className={`p-2.5 rounded-lg border text-xs space-y-1.5 transition-all ${
+                dualDocResult.integrity_report.quarantine_active
+                  ? 'bg-red-950/40 border-red-500/50 text-red-200'
+                  : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 font-bold">
+                  {dualDocResult.integrity_report.quarantine_active ? (
+                    <ShieldAlert className="w-4 h-4 text-red-400 shrink-0" />
+                  ) : (
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                  )}
+                  <span>
+                    {dualDocResult.integrity_report.quarantine_active
+                      ? 'SECURITY ALERT: Tamper Suspected'
+                      : 'STATUTORY INTEGRITY: Verified'}
+                  </span>
+                </div>
+                <span
+                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                    dualDocResult.integrity_report.quarantine_active
+                      ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                      : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  }`}
+                >
+                  {dualDocResult.integrity_report.quarantine_active ? 'QUARANTINE ACTIVE' : 'PAdES / CLEAN'}
+                </span>
+              </div>
+
+              {dualDocResult.integrity_report.quarantine_active && (
+                <div className="space-y-1.5 text-[11px] pt-1 border-t border-red-800/40">
+                  <p className="text-red-300/90 font-medium leading-relaxed">
+                    Browser execution is strictly locked to prevent statutory portal fraud under Section 199/200 IPC.
+                  </p>
+                  {onVerifyDigiLocker && (
+                    <button
+                      type="button"
+                      onClick={onVerifyDigiLocker}
+                      className="w-full py-1.5 px-3 rounded bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Resolve via DigiLocker (NSSO / MeriPehchaan)</span>
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {dualDocResult.integrity_report.forensic_findings && dualDocResult.integrity_report.forensic_findings.length > 0 && (
+                <div className="text-[10px] space-y-0.5 pt-1 border-t border-slate-700/40 opacity-85">
+                  {dualDocResult.integrity_report.forensic_findings.map((f, i) => (
+                    <p key={i} className="truncate">• {f}</p>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
