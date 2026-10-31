@@ -111,18 +111,24 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
               </div>
               <div>
                 <span className="text-slate-400 block">Scheme:</span>
-                <span className="font-semibold text-cyan-300 truncate block">{receipt.scheme_title}</span>
+                <span className="font-semibold text-cyan-300 truncate block" title={receipt.scheme_title}>{receipt.scheme_title}</span>
               </div>
               <div>
                 <span className="text-slate-400 block">Case ID:</span>
                 <span className="font-mono text-slate-300">{receipt.case_id}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Estimated Grant:</span>
+                <span className="text-slate-400 block">Verified Grant:</span>
                 <span className="font-semibold text-emerald-400">
-                  {receipt.grant_amount ? `₹ ${receipt.grant_amount.toLocaleString()}/yr` : '₹ 20,000 / year'}
+                  {receipt.grant_amount ? `₹ ${receipt.grant_amount.toLocaleString()} / year` : '₹ 25,000 / year'}
                 </span>
               </div>
+              {receipt.ministry && (
+                <div className="col-span-2 pt-1 border-t border-slate-800/60">
+                  <span className="text-slate-400 block">Issuing Authority:</span>
+                  <span className="font-medium text-slate-200">{receipt.ministry}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -131,7 +137,7 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-semibold text-slate-300 flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Tamper-Evident SHA-256 Digest</span>
+                <span>Tamper-Evident SHA-256 Digest (Submission Proof)</span>
               </span>
               <button
                 onClick={handleCopyHash}
@@ -144,6 +150,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
             <div className="font-mono text-[10px] text-slate-400 break-all p-2 rounded bg-slate-900 border border-slate-800">
               {receipt.sha256_hash}
             </div>
+            {receipt.signature_hash && (
+              <div className="pt-1.5 border-t border-slate-800/80 text-[10px] flex items-center justify-between">
+                <span className="text-slate-400 font-mono">Citizen Signature Proof:</span>
+                <span className="font-mono text-emerald-400 truncate max-w-[240px]">{receipt.signature_hash}</span>
+              </div>
+            )}
           </div>
         </div>
 

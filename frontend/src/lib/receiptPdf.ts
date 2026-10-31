@@ -68,12 +68,17 @@ export function generateReceiptPdf(receipt: TrackingReceipt): void {
   const fields = [
     ['Applicant Full Name:', receipt.student_name || 'Citizen Applicant'],
     ['Target Scheme:', receipt.scheme_title || 'Central Sector Scholarship Scheme'],
+    ['Issuing Ministry:', receipt.ministry || 'Ministry of Education (Department of Higher Education)'],
     ['Service Identifier:', receipt.service_id || 'state_scholarship'],
     ['Case Tracking Session:', receipt.case_id],
-    ['Annual Grant Value:', receipt.grant_amount ? `INR ${receipt.grant_amount.toLocaleString()}` : 'INR 25,000 / year'],
-    ['Filing Modality:', 'Autonomous Playwright Agent (Heuristic + Vision Grounding)'],
+    ['Annual Grant Value:', receipt.grant_amount ? `INR ${receipt.grant_amount.toLocaleString()} / year` : 'INR 25,000 / year'],
+    ['Filing Modality:', 'Autonomous Playwright Agent (Heuristic + Gemini ReAct Planner)'],
     ['Consent Authorization:', 'Digital Signature Verified & Time-stamped (HITL)'],
   ];
+
+  if (receipt.signature_hash) {
+    fields.push(['Signature Digest:', receipt.signature_hash.slice(0, 32) + '...']);
+  }
 
   for (const [label, val] of fields) {
     doc.setFont('helvetica', 'bold');

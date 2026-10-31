@@ -138,9 +138,11 @@ export interface TrackingReceipt {
   case_id: string;
   timestamp: string;
   sha256_hash: string;
+  signature_hash?: string | null;
   service_id: string;
   student_name: string;
   scheme_title: string;
+  ministry?: string;
   grant_amount?: number;
   screenshot_base64?: string;
   page_url?: string;

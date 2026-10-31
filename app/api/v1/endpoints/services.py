@@ -272,15 +272,29 @@ async def run_live_agent_session(case_id: str, body: ServiceRequest):
             raw_sha256 = hashlib.sha256(final_frame).hexdigest()
             tracking_num = receipt_info.get("tracking_number") or f"PUB-REC-2026-{abs(hash(case_id)) % 90000 + 10000}"
 
+            # Look up statutory scheme dynamically from live database
+            from app.domain.scholarships.client import get_db_schemes
+            all_schemes = get_db_schemes()
+            matched_scheme = next((s for s in all_schemes if s.id == body.service_id), None)
+            scheme_title = matched_scheme.name if matched_scheme else body.service_id.replace("_", " ").title()
+            grant_amount = float(matched_scheme.grant_amount_annual) if matched_scheme else 25000.0
+            ministry_name = matched_scheme.ministry if matched_scheme else "Department of Higher Education"
+
+            # Compute signature hash if provided
+            sig_data = telemetry_bus.get_signature(case_id)
+            sig_hash = hashlib.sha256(sig_data.encode("utf-8")).hexdigest() if sig_data else None
+
             final_receipt = {
                 "tracking_number": tracking_num,
                 "case_id": case_id,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "sha256_hash": raw_sha256,
+                "signature_hash": sig_hash,
                 "service_id": body.service_id,
                 "student_name": body.profile.full_name,
-                "scheme_title": body.service_id.replace("_", " ").title(),
-                "grant_amount": 25000.0
+                "scheme_title": scheme_title,
+                "ministry": ministry_name,
+                "grant_amount": grant_amount
             }
 
             await emit({
