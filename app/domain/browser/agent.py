@@ -488,7 +488,7 @@ class AutonomousBureaucracyAgent:
             screenshot_bytes = await self.page.screenshot(type="jpeg", quality=60)
             b64_image = base64.b64encode(screenshot_bytes).decode("ascii")
 
-            model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.8-flash"
+            model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
             prompt = (
@@ -556,7 +556,7 @@ class AutonomousBureaucracyAgent:
         }))""")
 
         api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.8-flash"
+        model = os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
         audit_findings = [
             f"Applicant full name verified as '{self.profile.full_name}'",
             f"Annual household income ₹{self.profile.income_annual:,.0f} verified under statutory grant ceiling",

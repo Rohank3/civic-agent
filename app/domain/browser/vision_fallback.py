@@ -20,7 +20,7 @@ class VisionLocator:
 
     def __init__(self, api_key: str | None = None, model: str | None = None):
         self.api_key = api_key or os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
-        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-3.8-flash"
+        self.model = model or os.getenv("CIVICAGENT_MODEL") or "gemini-3.5-flash-lite"
         self.base_url = "https://generativelanguage.googleapis.com/v1beta/models"
 
     async def locate(self, page: Page, label: str) -> Point | None:

@@ -21,7 +21,7 @@ def extract_transcript_with_gemini(file_bytes: bytes, file_name: str) -> Transcr
     api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-2.5-flash"
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash-lite"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
@@ -91,7 +91,7 @@ def extract_income_certificate_with_gemini(file_bytes: bytes, file_name: str) ->
     api_key = os.getenv("CIVICAGENT_GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return None
-    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-2.5-flash"
+    model = os.getenv("CIVICAGENT_MODEL") or os.getenv("MODEL") or "gemini-3.5-flash-lite"
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
 
     mime_type = "application/pdf" if file_bytes.startswith(b"%PDF-") else "image/png"
