@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Upload, 
   FileText, 
@@ -13,7 +13,9 @@ import {
   PlusCircle,
   Trash2,
   KeyRound,
-  Globe
+  Globe,
+  Edit2,
+  AlertTriangle
 } from 'lucide-react';
 import type { CitizenProfile, SchemeMatchResult, DualDocumentExtractionResult } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
@@ -22,12 +24,20 @@ import type { SamplePreset } from '../../lib/presets';
 interface IntakeColumnProps {
   profile: CitizenProfile;
   dualDocResult: DualDocumentExtractionResult | null;
-  onParseDocuments: (transcript: string, income: string) => Promise<void>;
+  onParseDocuments: (
+    transcript: string,
+    income: string,
+    transcriptName?: string,
+    incomeName?: string
+  ) => Promise<void>;
   schemes: SchemeMatchResult[];
   onSelectSchemeAndExecute: (scheme: SchemeMatchResult) => void;
   isExecuting: boolean;
   onOpenAddModal: () => void;
   onDeleteCustomScheme: (id: string) => void;
+  onOpenEditProfile: () => void;
+  appliedCount?: number;
+  onOpenAppliedModal?: () => void;
 }
 
 export const IntakeColumn: React.FC<IntakeColumnProps> = ({
@@ -39,22 +49,91 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
   isExecuting,
   onOpenAddModal,
   onDeleteCustomScheme,
+  onOpenEditProfile,
+  appliedCount = 0,
+  onOpenAppliedModal,
 }) => {
-  const [selectedPreset, setSelectedPreset] = useState<string>('first_gen_stem');
-  const [showProfileDetails, setShowProfileDetails] = useState<boolean>(false);
+  const [showTestPersonas, setShowTestPersonas] = useState<boolean>(false);
+  const [showProfileDetails, setShowProfileDetails] = useState<boolean>(true);
   const [isParsing, setIsParsing] = useState<boolean>(false);
+  
+  const [uploadedTranscriptName, setUploadedTranscriptName] = useState<string | null>(null);
+  const [uploadedIncomeName, setUploadedIncomeName] = useState<string | null>(null);
+
+  const transcriptInputRef = useRef<HTMLInputElement | null>(null);
+  const incomeInputRef = useRef<HTMLInputElement | null>(null);
+
+  const readFileAsPayload = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      if (file.type === 'text/plain') {
+        reader.onload = () => resolve(reader.result as string);
+        reader.readAsText(file);
+      } else {
+        // Read as DataURL and extract pure Base64
+        reader.onload = () => {
+          const result = reader.result as string;
+          const commaIndex = result.indexOf(',');
+          resolve(commaIndex >= 0 ? result.slice(commaIndex + 1) : result);
+        };
+        reader.readAsDataURL(file);
+      }
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
+  const handleTranscriptFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedTranscriptName(file.name);
+    setIsParsing(true);
+    try {
+      const transcriptPayload = await readFileAsPayload(file);
+      await onParseDocuments(
+        transcriptPayload,
+        dualDocResult?.income_certificate.raw_text || '',
+        file.name,
+        uploadedIncomeName || 'income_certificate.pdf'
+      );
+    } catch (err) {
+      console.error('Failed to read transcript file', err);
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const handleIncomeFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadedIncomeName(file.name);
+    setIsParsing(true);
+    try {
+      const incomePayload = await readFileAsPayload(file);
+      await onParseDocuments(
+        dualDocResult?.transcript.raw_text || '',
+        incomePayload,
+        uploadedTranscriptName || 'transcript.pdf',
+        file.name
+      );
+    } catch (err) {
+      console.error('Failed to read income file', err);
+    } finally {
+      setIsParsing(false);
+    }
+  };
 
   const handlePresetSelect = async (preset: SamplePreset) => {
-    setSelectedPreset(preset.id);
     setIsParsing(true);
+    setUploadedTranscriptName(`${preset.name}_Transcript.txt`);
+    setUploadedIncomeName(`${preset.name}_IncomeCert.txt`);
     await onParseDocuments(preset.transcriptText, preset.incomeCertText);
     setIsParsing(false);
   };
 
-  const sufficiency = dualDocResult ? dualDocResult.sufficiency_score * 100 : 98;
+  const sufficiency = dualDocResult ? dualDocResult.sufficiency_score * 100 : 95;
 
   return (
-    <div className="flex flex-col h-full bg-slate-900/60 rounded-xl border border-slate-800 overflow-hidden">
+    <div className="flex flex-col h-full bg-slate-900/60 rounded-xl border border-slate-800 overflow-hidden font-sans">
       {/* Column Header */}
       <div className="p-3.5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -63,83 +142,98 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
           </div>
           <h2 className="font-semibold text-sm text-slate-100">Upload-Driven Intake & Schemes</h2>
         </div>
-        <span className="text-[11px] text-slate-400">Zero Dummy Data</span>
+        <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+          <CheckCircle2 className="w-3 h-3" />
+          <span>Zero Dummy Data</span>
+        </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-4">
-        {/* Sample Quick-Presets */}
-        <div>
-          <label className="text-xs font-semibold text-slate-300 mb-2 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Select Applicant Persona (1-Click Evaluation)</span>
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {SAMPLE_PRESETS.map((preset) => {
-              const active = selectedPreset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  onClick={() => handlePresetSelect(preset)}
-                  disabled={isExecuting}
-                  className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
-                    active
-                      ? 'bg-indigo-950/40 border-indigo-500/60 ring-1 ring-indigo-500/40 text-slate-100'
-                      : 'bg-slate-800/60 hover:bg-slate-800 border-slate-700/60 text-slate-300'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-semibold text-xs text-white">{preset.name}</span>
-                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">
-                      {preset.category}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 truncate">{preset.title}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+        {/* Hidden native file inputs */}
+        <input
+          ref={transcriptInputRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.txt"
+          className="hidden"
+          onChange={handleTranscriptFileChange}
+        />
+        <input
+          ref={incomeInputRef}
+          type="file"
+          accept=".pdf,.png,.jpg,.jpeg,.txt"
+          className="hidden"
+          onChange={handleIncomeFileChange}
+        />
 
-        {/* Dual Document Upload Dropzone */}
-        <div className="p-3 rounded-lg border border-slate-700/60 bg-slate-800/40 space-y-2.5">
+        {/* Multimodal Document Upload Cards */}
+        <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/40 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
               <Upload className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Multimodal Document Intelligence</span>
-              {isParsing && <span className="text-[10px] text-indigo-400 animate-pulse font-normal">(Extracting...)</span>}
+              <span>Upload Official Documents</span>
+              {isParsing && (
+                <span className="text-[10px] text-indigo-400 animate-pulse font-normal">
+                  (Parsing with Gemini & PyPDF...)
+                </span>
+              )}
             </span>
-            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" />
-              <span>OCR Pre-flight Ready</span>
-            </span>
+            <span className="text-[10px] text-slate-400">PDF / Image / Text</span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="p-2 rounded border border-dashed border-slate-600 bg-slate-900/40 flex flex-col items-center justify-center text-center">
-              <FileText className="w-5 h-5 text-blue-400 mb-1" />
-              <span className="text-[11px] font-medium text-slate-200">Academic Transcript</span>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* Academic Transcript Card */}
+            <div
+              onClick={() => transcriptInputRef.current?.click()}
+              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-blue-500 bg-slate-900/50 hover:bg-slate-900/80 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+            >
+              <FileText className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform mb-1.5" />
+              <span className="text-xs font-medium text-slate-200">
+                {uploadedTranscriptName ? (
+                  <span className="text-blue-300 font-semibold truncate max-w-[140px] block">
+                    {uploadedTranscriptName}
+                  </span>
+                ) : (
+                  'Upload Transcript'
+                )}
+              </span>
               <span className="text-[10px] text-slate-400 mt-0.5">
-                GPA: {profile.attributes.gpa || 3.85} • {profile.attributes.major ? 'Parsed' : 'Ready'}
+                {profile.attributes.gpa || profile.attributes.percentage
+                  ? `Score: ${profile.attributes.gpa || profile.attributes.percentage}% • Parsed`
+                  : 'Click or drop PDF to extract'}
               </span>
             </div>
 
-            <div className="p-2 rounded border border-dashed border-slate-600 bg-slate-900/40 flex flex-col items-center justify-center text-center">
-              <ShieldCheck className="w-5 h-5 text-emerald-400 mb-1" />
-              <span className="text-[11px] font-medium text-slate-200">Income Certificate</span>
+            {/* Income Certificate Card */}
+            <div
+              onClick={() => incomeInputRef.current?.click()}
+              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-emerald-500 bg-slate-900/50 hover:bg-slate-900/80 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+            >
+              <ShieldCheck className="w-6 h-6 text-emerald-400 group-hover:scale-110 transition-transform mb-1.5" />
+              <span className="text-xs font-medium text-slate-200">
+                {uploadedIncomeName ? (
+                  <span className="text-emerald-300 font-semibold truncate max-w-[140px] block">
+                    {uploadedIncomeName}
+                  </span>
+                ) : (
+                  'Upload Income Proof'
+                )}
+              </span>
               <span className="text-[10px] text-slate-400 mt-0.5">
-                ₹{profile.income_annual.toLocaleString()} • Verified
+                {profile.income_annual
+                  ? `₹${profile.income_annual.toLocaleString()} • Verified`
+                  : 'Click or drop PDF to verify'}
               </span>
             </div>
           </div>
 
           {/* Sufficiency Score Gauge */}
-          <div className="pt-1 flex items-center justify-between text-xs border-t border-slate-700/40">
-            <span className="text-slate-400">Pre-flight Sufficiency:</span>
+          <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-700/40">
+            <span className="text-slate-400">Pre-flight Sufficiency Score:</span>
             <div className="flex items-center gap-1.5">
               <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
                 <div 
                   className={`h-full rounded-full transition-all duration-500 ${
-                    sufficiency >= 90 ? 'bg-emerald-500' : 'bg-amber-500'
+                    sufficiency >= 80 ? 'bg-emerald-500' : 'bg-amber-500'
                   }`}
                   style={{ width: `${sufficiency}%` }}
                 />
@@ -147,50 +241,143 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
               <span className="font-bold text-emerald-400 text-xs">{sufficiency.toFixed(0)}%</span>
             </div>
           </div>
-        </div>
 
-        {/* Profile Collapsible Summary */}
-        <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-800/30">
-          <button
-            onClick={() => setShowProfileDetails(!showProfileDetails)}
-            className="w-full px-3 py-2 flex items-center justify-between text-xs font-semibold text-slate-300 hover:bg-slate-800/60 transition-colors"
-          >
-            <div className="flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Extracted Citizen Profile ({profile.full_name})</span>
-            </div>
-            {showProfileDetails ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
-          </button>
-
-          {showProfileDetails && (
-            <div className="p-3 border-t border-slate-800 text-[11px] space-y-1.5 bg-slate-900/40">
-              <div className="flex justify-between">
-                <span className="text-slate-400">National ID:</span>
-                <span className="font-mono text-slate-200">{profile.national_id}</span>
+          {/* Warning notifications if fields missing */}
+          {dualDocResult?.warnings && dualDocResult.warnings.length > 0 && (
+            <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] space-y-1">
+              <div className="flex items-center gap-1 font-semibold">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                <span>Verification Advisory:</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Email:</span>
-                <span className="text-slate-200">{profile.email}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Domicile:</span>
-                <span className="text-slate-200">{profile.address_city}, {profile.address_state}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-400">Institution:</span>
-                <span className="text-slate-200 truncate max-w-[180px]">{profile.attributes.institution || 'State Tech'}</span>
-              </div>
+              {dualDocResult.warnings.map((w, idx) => (
+                <p key={idx} className="text-[10px] text-amber-200/90 pl-4 list-disc">• {w}</p>
+              ))}
             </div>
           )}
         </div>
 
-        {/* Live Scheme Matcher Results */}
+        {/* Live Citizen Profile Card & Direct Editor */}
+        <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-800/40">
+          <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-800/70 border-b border-slate-800">
+            <div className="flex items-center gap-2">
+              <User className="w-4 h-4 text-indigo-400" />
+              <span className="text-xs font-bold text-white truncate max-w-[150px]">
+                {profile.full_name || 'Active Citizen'}
+              </span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">
+                {profile.category || 'GENERAL'}
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onOpenEditProfile}
+                className="px-2 py-1 rounded bg-blue-600/30 hover:bg-blue-600/60 border border-blue-500/40 text-blue-300 text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                title="Edit Citizen Profile fields directly"
+              >
+                <Edit2 className="w-3 h-3" />
+                <span>Edit Profile</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowProfileDetails(!showProfileDetails)}
+                className="p-1 rounded text-slate-400 hover:text-white transition-colors"
+              >
+                {showProfileDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          {showProfileDetails && (
+            <div className="p-3 text-[11px] space-y-1.5 bg-slate-900/50">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">National ID / Aadhaar:</span>
+                <span className="font-mono text-slate-200 font-semibold">{profile.national_id || 'Not set'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Registered Email:</span>
+                <span className="text-slate-200 truncate max-w-[170px]">{profile.email || 'Not set'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Domicile State:</span>
+                <span className="text-slate-200 font-medium">{profile.address_state || 'Not set'}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Annual Income:</span>
+                <span className="text-emerald-400 font-bold font-mono">
+                  ₹{(profile.income_annual || 0).toLocaleString()}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400">Academic Score:</span>
+                <span className="text-cyan-300 font-medium">
+                  {profile.attributes.gpa ? `GPA ${profile.attributes.gpa}` : ''} 
+                  {profile.attributes.percentage ? ` (${profile.attributes.percentage}%)` : ''}
+                  {!profile.attributes.gpa && !profile.attributes.percentage ? 'Not set' : ''}
+                </span>
+              </div>
+              {profile.attributes.institution && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-400">Institution:</span>
+                  <span className="text-slate-300 truncate max-w-[170px]">{profile.attributes.institution}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Optional Testing Persona Sandbox Toggle */}
+        <div className="border border-slate-800/80 rounded-lg overflow-hidden bg-slate-950/40">
+          <button
+            type="button"
+            onClick={() => setShowTestPersonas(!showTestPersonas)}
+            className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors"
+          >
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Need test data? Load Benchmark Persona</span>
+            </div>
+            {showTestPersonas ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+
+          {showTestPersonas && (
+            <div className="p-2.5 border-t border-slate-800/80 grid grid-cols-2 gap-2 bg-slate-900/30">
+              {SAMPLE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => handlePresetSelect(preset)}
+                  disabled={isExecuting}
+                  className="p-2 rounded-lg border border-slate-800 hover:border-indigo-500/60 bg-slate-900/60 hover:bg-slate-800 text-left transition-all cursor-pointer text-[11px]"
+                >
+                  <div className="font-semibold text-white truncate">{preset.name}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{preset.category}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Live Statutory Scheme Matcher Results */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-amber-400" />
-              <span>Available Schemes ({schemes.length})</span>
-            </span>
+          <div className="flex items-center justify-between gap-1 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                <Award className="w-3.5 h-3.5 text-amber-400" />
+                <span>Available Schemes ({schemes.length})</span>
+              </span>
+              {appliedCount > 0 && onOpenAppliedModal && (
+                <button
+                  type="button"
+                  onClick={onOpenAppliedModal}
+                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer active:scale-95"
+                  title="View your submitted scholarship applications"
+                >
+                  <CheckCircle2 className="w-3 h-3" />
+                  <span>{appliedCount} Applied</span>
+                </button>
+              )}
+            </div>
             <button
               onClick={onOpenAddModal}
               disabled={isExecuting}
@@ -204,14 +391,16 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
 
           <div className="space-y-2">
             {schemes.map((match) => {
-              const { scheme, is_eligible, eligibility_score } = match;
+              const { scheme, is_eligible, eligibility_score, missing_criteria } = match;
               return (
                 <div
                   key={scheme.id}
                   className={`p-3 rounded-lg border transition-all space-y-2 ${
                     scheme.is_custom
                       ? 'border-cyan-500/40 bg-cyan-950/20 shadow-sm shadow-cyan-500/5'
-                      : 'border-slate-800 bg-slate-800/40 hover:border-slate-700'
+                      : is_eligible
+                      ? 'border-slate-800 bg-slate-800/40 hover:border-slate-700'
+                      : 'border-slate-800/60 bg-slate-900/30 opacity-75'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -261,10 +450,21 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = ({
                     <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
                       Min Marks {scheme.min_gpa_or_percentage}%
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono">
+                    <span className={`px-1.5 py-0.5 rounded border font-mono ${
+                      is_eligible 
+                        ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' 
+                        : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                    }`}>
                       {(eligibility_score * 100).toFixed(0)}% Match
                     </span>
                   </div>
+
+                  {/* Missing criteria notice if ineligible */}
+                  {!is_eligible && missing_criteria && missing_criteria.length > 0 && (
+                    <div className="text-[10px] text-rose-400/90 bg-rose-500/5 p-1.5 rounded border border-rose-500/10">
+                      {missing_criteria[0]}
+                    </div>
+                  )}
 
                   {/* Action Button */}
                   <button

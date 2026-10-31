@@ -66,7 +66,7 @@ export function generateReceiptPdf(receipt: TrackingReceipt): void {
 
   y += 10;
   const fields = [
-    ['Applicant Full Name:', receipt.student_name || 'Aarav Sharma'],
+    ['Applicant Full Name:', receipt.student_name || 'Citizen Applicant'],
     ['Target Scheme:', receipt.scheme_title || 'Central Sector Scholarship Scheme'],
     ['Service Identifier:', receipt.service_id || 'state_scholarship'],
     ['Case Tracking Session:', receipt.case_id],

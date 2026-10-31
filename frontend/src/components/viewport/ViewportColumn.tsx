@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   SkipForward, 
   Globe, 
@@ -6,50 +6,94 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   FileCheck, 
-  AlertCircle,
   KeyRound,
-  LogIn,
   RefreshCw,
-  UserCheck
+  UserCheck,
+  Play,
+  Pause,
+  RotateCcw,
+  Video,
+  Monitor,
+  StepForward,
+  ShieldAlert
 } from 'lucide-react';
-import type { ActorRole, CitizenProfile, ScholarshipScheme } from '../../types';
+import type { ActorRole, CitizenProfile, ScholarshipScheme, TrackingReceipt } from '../../types';
 
 interface ViewportColumnProps {
   currentStage: string;
   activeActor: ActorRole;
-  pacingMode: '1x' | '2x' | '5x' | 'turbo';
-  setPacingMode: (mode: '1x' | '2x' | '5x' | 'turbo') => void;
+  pacingMode: string;
+  setPacingMode: (mode: any) => void;
   onSkipTyping: () => void;
-  screenshotBase64: string | null;
+  screenshotBase64?: string | null;
   currentStep: number;
   profile: CitizenProfile;
   selectedScheme: ScholarshipScheme | null;
   isExecuting: boolean;
   onTriggerHitlSignoff: () => void;
+  receipt?: TrackingReceipt | null;
+  onOpenReceipt?: () => void;
+  isPaused?: boolean;
+  onTogglePause?: () => void;
+  onStepAdvance?: () => void;
 }
 
 export const ViewportColumn: React.FC<ViewportColumnProps> = ({
   currentStage,
   activeActor,
-  pacingMode,
-  setPacingMode,
+  pacingMode: _pacingMode,
+  setPacingMode: _setPacingMode,
   onSkipTyping,
   screenshotBase64,
   currentStep,
   profile,
   selectedScheme,
   isExecuting,
-  onTriggerHitlSignoff,
+  onTriggerHitlSignoff: _onTriggerHitlSignoff,
+  receipt,
+  onOpenReceipt,
+  isPaused = false,
+  onTogglePause,
+  onStepAdvance,
 }) => {
+  const [viewportMode, setViewportMode] = useState<'live' | 'replay'>('live');
+  const [replayStep, setReplayStep] = useState<number>(1);
+  const [isReplaying, setIsReplaying] = useState<boolean>(false);
+
   const [activePortalView, setActivePortalView] = useState<'form' | 'login'>(
     selectedScheme?.login_mode === 'credentials' ? 'login' : 'form'
   );
   const [loginUsername, setLoginUsername] = useState(
-    selectedScheme?.credentials_username || 'rohankumar_7'
+    selectedScheme?.credentials_username || profile.email || 'citizen_applicant'
   );
   const [loginPassword, setLoginPassword] = useState('••••••••••••');
   const [captchaCode, setCaptchaCode] = useState('7Kx9M');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  const defaultUser = selectedScheme?.credentials_username || profile.email || 'citizen_applicant';
+  const [prevDefaultUser, setPrevDefaultUser] = useState(defaultUser);
+  if (defaultUser !== prevDefaultUser) {
+    setPrevDefaultUser(defaultUser);
+    setLoginUsername(defaultUser);
+  }
+
+  // Replay playback timer
+  useEffect(() => {
+    let timer: any;
+    if (isReplaying) {
+      timer = setInterval(() => {
+        setReplayStep((prev) => {
+          if (prev >= 5) {
+            setIsReplaying(false);
+            return 5;
+          }
+          return prev + 1;
+        });
+      }, 1600);
+    }
+    return () => clearInterval(timer);
+  }, [isReplaying]);
+
   const getActorTitle = () => {
     switch (activeActor) {
       case 'STUDENT_INTAKE':
@@ -60,380 +104,534 @@ export const ViewportColumn: React.FC<ViewportColumnProps> = ({
         return 'Human-in-the-Loop Review & Legal Consent Gate';
       case 'GOVERNMENT_AUTHORITY':
         return 'State Scholarship Department Receipt Registry';
+      default:
+        return 'Autonomous Bureaucracy Agent';
     }
   };
 
+  const replayMilestones = [
+    { step: 1, title: 'Obstacle Evasion', desc: 'Auto-dismissed cookie notice and regulatory alert modal' },
+    { step: 2, title: 'Demographics Populated', desc: 'Heuristic DOM fill of name, Aadhaar, DOB, and email' },
+    { step: 3, title: 'Document & Financial Proofs', desc: 'Attached income certificate and normalized transcript' },
+    { step: 4, title: 'Self-Reflection Audit', desc: 'DOM input verification and pre-submission snapshot' },
+    { step: 5, title: 'Cryptographic SHA-256 Receipt', desc: 'Government confirmation tracking number extracted' },
+  ];
+
+  const isAwaitingIntervention = currentStage === 'AWAITING_HUMAN_INTERVENTION';
+
   return (
-    <div className="flex flex-col h-full bg-slate-900/60 rounded-xl border border-slate-800 overflow-hidden">
-      {/* Column Header */}
-      <div className="p-3.5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+    <div className="flex-1 flex flex-col bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+      {/* Top Header Bar */}
+      <div className="px-4 py-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs border border-purple-500/30">
-            3
+          <div className="w-8 h-8 rounded-lg bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400">
+            <Monitor className="w-4 h-4" />
           </div>
-          <h2 className="font-semibold text-sm text-slate-100">Live Viewport Screencast</h2>
+          <div>
+            <h2 className="text-sm font-bold text-white flex items-center gap-1.5">
+              <span>Live Viewport Screencast</span>
+              {isExecuting && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+              )}
+            </h2>
+            <p className="text-[11px] text-slate-400">
+              Real-time Playwright Chromium execution frames
+            </p>
+          </div>
         </div>
 
-        {/* Smart Pacing & Chapter Cuts Bar */}
-        <div className="flex items-center gap-1 bg-slate-950/60 p-1 rounded-lg border border-slate-800" title="Agent execution pacing between browser actions">
-          <span className="text-[10px] text-slate-400 font-medium px-1.5 hidden sm:inline">Pacing:</span>
-          <button
-            onClick={() => setPacingMode('1x')}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-              pacingMode === '1x' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            1x
-          </button>
-          <button
-            onClick={() => setPacingMode('2x')}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-              pacingMode === '2x' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            2x
-          </button>
-          <button
-            onClick={() => setPacingMode('5x')}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-              pacingMode === '5x' ? 'bg-blue-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            5x
-          </button>
-          <button
-            onClick={() => setPacingMode('turbo')}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
-              pacingMode === 'turbo' ? 'bg-purple-600 text-white font-bold' : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Turbo
-          </button>
+        {/* View Mode & Stepper Controls */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewportMode('live')}
+              className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 cursor-pointer ${
+                viewportMode === 'live'
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              <span>Live Stream</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewportMode('replay');
+                setReplayStep(1);
+              }}
+              className={`px-2.5 py-1 rounded-md transition-all font-medium flex items-center gap-1 cursor-pointer ${
+                viewportMode === 'replay'
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Video className="w-3.5 h-3.5" />
+              <span>Audit Replay</span>
+            </button>
+          </div>
 
-          {/* Skip Repetitive Typing Chapter Cut Button */}
-          <button
-            onClick={onSkipTyping}
-            disabled={!isExecuting || currentStage === 'SUBMITTED'}
-            className="ml-1 px-2 py-0.5 rounded bg-indigo-600/30 hover:bg-indigo-600/60 border border-indigo-500/40 text-indigo-300 text-[10px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95"
-            title="Fast forward through mechanical field typing to the next milestone"
-          >
-            <SkipForward className="w-3 h-3" />
-            <span>Skip Typing</span>
-          </button>
+          {/* Stepper & Stealth Cadence Controls */}
+          {viewportMode === 'live' && (
+            <div className="flex items-center gap-1.5 bg-slate-950/80 p-1 rounded-lg border border-slate-800">
+              <span className="text-[10px] text-emerald-400 font-mono font-semibold px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded hidden md:inline">
+                Stealth Human Cadence (40-85ms)
+              </span>
+
+              {/* Pause / Resume Button */}
+              {onTogglePause && (
+                <button
+                  type="button"
+                  onClick={onTogglePause}
+                  disabled={!isExecuting || currentStage === 'SUBMITTED'}
+                  className={`px-2 py-1 rounded text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer ${
+                    isPaused
+                      ? 'bg-amber-500 text-slate-950 font-bold shadow-md shadow-amber-500/20 animate-pulse'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed'
+                  }`}
+                  title={isPaused ? 'Resume Agent Execution' : 'Pause Agent Execution'}
+                >
+                  {isPaused ? <Play className="w-3 h-3 fill-current" /> : <Pause className="w-3 h-3" />}
+                  <span>{isPaused ? 'Resume' : 'Pause'}</span>
+                </button>
+              )}
+
+              {/* Step Next Button */}
+              {onStepAdvance && (
+                <button
+                  type="button"
+                  onClick={onStepAdvance}
+                  disabled={!isExecuting || currentStage === 'SUBMITTED'}
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  title="Advance one step in step-by-step mode"
+                >
+                  <StepForward className="w-3 h-3" />
+                  <span className="hidden sm:inline">Step</span>
+                </button>
+              )}
+
+              {/* Skip Typing Button */}
+              <button
+                type="button"
+                onClick={onSkipTyping}
+                disabled={!isExecuting || currentStage === 'SUBMITTED'}
+                className="px-2 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/60 border border-indigo-500/40 text-indigo-300 text-[11px] font-semibold flex items-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer active:scale-95"
+                title="Fast forward through typing cadence on current page"
+              >
+                <SkipForward className="w-3 h-3" />
+                <span>Fast-Forward</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
       {/* Custody Persona Status Bar */}
       <div className="px-3.5 py-2 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className={`w-2 h-2 rounded-full ${isExecuting ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
           <span className="font-medium text-slate-300">{getActorTitle()}</span>
         </div>
-        <div className="flex items-center gap-2 font-mono text-[11px] text-slate-400">
-          <Globe className="w-3 h-3 text-cyan-400" />
+        <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
+          <Globe className="w-3.5 h-3.5 text-blue-400" />
           <span className="truncate max-w-[200px]">
-            {selectedScheme ? selectedScheme.portal_url : 'https://scholarships.gov.in'}
+            {selectedScheme?.portal_url || 'https://scholarships.gov.in'}
           </span>
         </div>
       </div>
 
-      {/* Main Screencast Display */}
-      <div className="flex-1 bg-slate-950 flex flex-col p-4 overflow-y-auto">
-        {screenshotBase64 ? (
-          <div className="rounded-lg border border-slate-800 overflow-hidden shadow-2xl bg-black flex-1 flex items-center justify-center">
-            <img
-              src={`data:image/jpeg;base64,${screenshotBase64}`}
-              alt="Live Browser Screencast"
-              className="w-full h-full object-contain"
-            />
+      {/* Security Challenge Banner (CAPTCHA / OTP) */}
+      {isAwaitingIntervention && (
+        <div className="bg-amber-500/20 border-b border-amber-500/40 p-2.5 px-4 flex items-center justify-between flex-wrap gap-2 animate-in fade-in">
+          <div className="flex items-center gap-2 text-xs text-amber-200">
+            <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 animate-bounce" />
+            <span>
+              <strong>Security Challenge (CAPTCHA / OTP) Detected:</strong> Please solve the challenge or click Continue.
+            </span>
           </div>
-        ) : (
-          /* Live Synthetic Portal Screencast Simulation Frame */
-          <div className="flex-1 rounded-lg border border-slate-800 bg-slate-900/90 shadow-2xl overflow-hidden flex flex-col">
-            {/* Browser Address Bar UI */}
-            <div className="bg-slate-800 px-3 py-1.5 border-b border-slate-700 flex items-center gap-2">
-              <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500/80 inline-block" />
-                <span className="w-2.5 h-2.5 rounded-full bg-yellow-500/80 inline-block" />
-                <span className="w-2.5 h-2.5 rounded-full bg-green-500/80 inline-block" />
-              </div>
-              <div className="flex-1 bg-slate-900 px-2 py-0.5 rounded text-[11px] text-slate-300 font-mono flex items-center gap-1 border border-slate-700/60">
-                <Lock className="w-3 h-3 text-emerald-400" />
-                <span className="truncate">
-                  {selectedScheme 
-                    ? (activePortalView === 'login' ? `${selectedScheme.portal_url}/auth/login` : selectedScheme.portal_url) 
-                    : 'https://scholarships.gov.in/portal/wizard'}
-                </span>
-              </div>
-              {/* Portal Mode Toggle: Login vs Wizard Form */}
-              <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded border border-slate-700/70 text-[10px]">
+          <button
+            type="button"
+            onClick={onSkipTyping}
+            className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg shadow transition-all cursor-pointer"
+          >
+            I Solved It, Continue
+          </button>
+        </div>
+      )}
+
+      {/* Main Viewport Body */}
+      <div className="flex-1 bg-slate-950 relative overflow-hidden flex flex-col">
+        {/* =====================================================================
+            VIEW 1: AUDIT REPLAY & SCREENCAST RECORDING PLAYER
+           ===================================================================== */}
+        {viewportMode === 'replay' ? (
+          <div className="flex-1 flex flex-col p-4 overflow-y-auto space-y-4">
+            {/* Player Controls Bar */}
+            <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setActivePortalView('login')}
-                  className={`px-1.5 py-0.5 rounded transition-all flex items-center gap-1 ${
-                    activePortalView === 'login' 
-                      ? 'bg-blue-600 text-white font-semibold shadow-xs' 
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="View portal authentication challenge"
+                  onClick={() => setIsReplaying(!isReplaying)}
+                  className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white transition-all cursor-pointer shadow-md shadow-blue-500/20 active:scale-95"
+                  title={isReplaying ? 'Pause Playback' : 'Play Session Recording'}
                 >
-                  <LogIn className="w-3 h-3" />
-                  <span>Portal Login</span>
+                  {isReplaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setActivePortalView('form')}
-                  className={`px-1.5 py-0.5 rounded transition-all flex items-center gap-1 ${
-                    activePortalView === 'form' 
-                      ? 'bg-blue-600 text-white font-semibold shadow-xs' 
-                      : 'text-slate-400 hover:text-slate-200'
-                  }`}
-                  title="View application wizard form"
+                  onClick={() => {
+                    setIsReplaying(false);
+                    setReplayStep(1);
+                  }}
+                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                  title="Rewind to Beginning"
                 >
-                  <FileCheck className="w-3 h-3" />
-                  <span>Scheme Wizard</span>
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <div className="ml-1">
+                  <span className="text-xs font-bold text-white block">Execution Audit Recording</span>
+                  <span className="text-[10px] text-slate-400">Step {replayStep} of 5 • Playwright Headless Session</span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold font-mono">
+                  {isReplaying ? 'PLAYING' : 'PAUSED'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setViewportMode('live')}
+                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium transition-colors"
+                >
+                  Return to Live
                 </button>
               </div>
             </div>
 
-            {/* Portal Content Viewport */}
-            <div className="p-4 flex-1 overflow-y-auto font-sans text-slate-200 space-y-4">
-              {/* View 1: Government Portal Interactive Login Screen */}
-              {activePortalView === 'login' && !isExecuting && (
-                <div className="max-w-md mx-auto my-auto py-2 space-y-4">
-                  <div className="text-center border-b border-slate-800 pb-3">
-                    <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 mb-2">
-                      <KeyRound className="w-5 h-5" />
+            {/* Stepper Scrubber Timeline */}
+            <div className="grid grid-cols-5 gap-1.5 bg-slate-900/60 p-2 rounded-xl border border-slate-800/80">
+              {replayMilestones.map((m) => {
+                const isCurrent = replayStep === m.step;
+                const isPassed = replayStep > m.step;
+                return (
+                  <button
+                    key={m.step}
+                    type="button"
+                    onClick={() => {
+                      setIsReplaying(false);
+                      setReplayStep(m.step);
+                    }}
+                    className={`p-2 rounded-lg text-left transition-all cursor-pointer ${
+                      isCurrent
+                        ? 'bg-blue-600/30 border border-blue-500 text-white ring-1 ring-blue-500/40'
+                        : isPassed
+                        ? 'bg-emerald-950/20 border border-emerald-500/30 text-emerald-300'
+                        : 'bg-slate-900/40 border border-slate-800 text-slate-500 hover:text-slate-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1 text-[10px] font-mono font-bold">
+                      {isPassed ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <span>0{m.step}</span>}
                     </div>
-                    <h3 className="font-bold text-sm text-white">
-                      {selectedScheme?.name || 'National Scholarship Portal (NSP)'}
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      Official Government Applicant Login & Access Gateway
-                    </p>
-                  </div>
+                    <p className="text-[10px] font-semibold mt-1 truncate">{m.title}</p>
+                  </button>
+                );
+              })}
+            </div>
 
-                  <div className="space-y-3 text-xs bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
-                    <div>
-                      <label className="text-slate-400 block mb-1 font-medium">Application ID / Registered Email</label>
-                      <input
-                        type="text"
-                        value={loginUsername}
-                        onChange={(e) => setLoginUsername(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-                        placeholder="e.g. rohankumar_7"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-slate-400 block mb-1 font-medium">Password / Access Passkey</label>
-                      <input
-                        type="password"
-                        value={loginPassword}
-                        onChange={(e) => setLoginPassword(e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-                        placeholder="••••••••••••"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-slate-400 block mb-1 font-medium">Captcha Verification</label>
-                      <div className="flex items-center gap-2">
-                        <div className="px-3 py-1 bg-slate-900 border border-slate-700 rounded font-mono font-bold tracking-widest text-emerald-400 select-none text-sm">
-                          {captchaCode}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setCaptchaCode(Math.random().toString(36).slice(2, 7).toUpperCase())}
-                          className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
-                          title="Refresh Captcha"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
-                        <input
-                          type="text"
-                          defaultValue={captchaCode}
-                          className="flex-1 bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-2 flex flex-col gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsLoggingIn(true);
-                          setTimeout(() => {
-                            setIsLoggingIn(false);
-                            setActivePortalView('form');
-                          }, 600);
-                        }}
-                        disabled={isLoggingIn}
-                        className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20"
-                      >
-                        {isLoggingIn ? (
-                          <>
-                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            <span>Injecting Credentials via Playwright...</span>
-                          </>
-                        ) : (
-                          <>
-                            <UserCheck className="w-3.5 h-3.5" />
-                            <span>Sign In to Portal & Open Wizard</span>
-                          </>
-                        )}
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setActivePortalView('form')}
-                        className="w-full py-1.5 text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
-                      >
-                        Skip Login (Fresh Registration Mode)
-                      </button>
-                    </div>
-                  </div>
+            {/* Screen Recording Viewport Frame */}
+            <div className="flex-1 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-center space-y-3">
+              <div className="p-3 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
+                <div className="flex items-center justify-between text-xs font-mono">
+                  <span className="text-emerald-400 font-semibold">Audit Milestone #{replayStep} Verified</span>
+                  <span className="text-slate-400">Playwright Frame #{replayStep * 14}</span>
                 </div>
-              )}
-
-              {/* View 2: Application Wizard Form (Steps 1, 2, 3) */}
-              {(activePortalView === 'form' || isExecuting) && (
-                <>
-                  <div className="border-b border-slate-700/60 pb-3 flex items-start justify-between">
-                    <div>
-                      <h3 className="font-bold text-sm text-white">
-                        {selectedScheme ? selectedScheme.name : 'State Public Scholarship & Grant Portal'}
-                      </h3>
-                      <p className="text-[11px] text-slate-400">
-                        Official Application Form for Higher Education Financial Aid
-                      </p>
-                    </div>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                      Step {currentStep} of 3
-                    </span>
+                <h4 className="text-sm font-bold text-white">{replayMilestones[replayStep - 1].title}</h4>
+                <p className="text-xs text-slate-300">{replayMilestones[replayStep - 1].desc}</p>
+                {replayStep === 5 && (
+                  <div className="pt-2 border-t border-slate-800 text-xs space-y-1 font-mono">
+                    <p className="text-slate-400">• Official Tracking ID: <strong className="text-emerald-400">{receipt?.tracking_number || 'PUB-REC-2026-CONFIRMED'}</strong></p>
+                    <p className="text-slate-400">• SHA-256 Digest: <span className="text-cyan-400 text-[10px] break-all">{receipt?.sha256_hash || 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'}</span></p>
                   </div>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* =====================================================================
+              VIEW 2: LIVE SCREENCAST (REAL PLAYWRIGHT FRAMES)
+             ===================================================================== */
+          <div className="flex-1 flex flex-col p-3 overflow-hidden">
+            <div className="w-full flex-1 bg-slate-900 border border-slate-800 rounded-lg flex flex-col overflow-hidden shadow-inner">
+              {/* Browser Address Bar */}
+              <div className="px-3 py-2 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500/60 inline-block" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500/60 inline-block" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/60 inline-block" />
+                </div>
 
-              {/* Step 1 Simulation: Demographics */}
-              {currentStep === 1 && (
-                <div className="space-y-3 text-xs">
+                <div className="flex-1 max-w-md bg-slate-900/90 border border-slate-800 rounded px-2.5 py-1 text-slate-300 text-xs flex items-center gap-1.5 font-mono">
+                  <Lock className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span className="text-slate-400 text-[11px] truncate">
+                    {selectedScheme?.portal_url || 'https://scholarships.gov.in'}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 text-[11px]">
                   {selectedScheme?.login_mode === 'credentials' && (
-                    <div className="p-2.5 rounded bg-blue-950/40 border border-blue-500/40 text-[11px] text-blue-200 flex items-center gap-2">
-                      <KeyRound className="w-4 h-4 text-cyan-400 shrink-0" />
-                      <span>
-                        <strong>Portal Authenticated:</strong> Session unlocked using encrypted credentials for{' '}
-                        <code>{selectedScheme.credentials_username || 'Student User'}</code>.
-                      </span>
-                    </div>
-                  )}
-
-                  <div className="p-2.5 rounded bg-blue-950/30 border border-blue-800/40 text-[11px] text-blue-200 flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <span>Agent auto-filling applicant demographics via heuristic DOM matcher.</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-400 block mb-1">Full Legal Name</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={profile.full_name}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-medium"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">National ID / Aadhaar</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={profile.national_id}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">Contact Email</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={profile.email}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">Phone Number</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={profile.phone}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 2 Simulation: Academic & Income Evidence */}
-              {currentStep === 2 && (
-                <div className="space-y-3 text-xs">
-                  <div className="p-2.5 rounded bg-blue-950/30 border border-blue-800/40 text-[11px] text-blue-200 flex items-center gap-2">
-                    <FileCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Uploading verified proof documents and mapping household income ceiling.</span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-slate-400 block mb-1">Annual Household Income</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={`₹ ${profile.income_annual.toLocaleString()}`}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-emerald-400 font-semibold"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-slate-400 block mb-1">Academic Score (GPA / %)</label>
-                      <input
-                        type="text"
-                        readOnly
-                        value={`${profile.attributes.gpa || 3.85} GPA / ${profile.attributes.percentage || 82.5}%`}
-                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-cyan-400 font-semibold"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="p-2.5 rounded border border-emerald-500/30 bg-emerald-950/20 text-[11px] text-emerald-300 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>Attached Document: Official_Transcript.pdf (Verified)</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 3 Simulation: Final Review & HITL Trigger */}
-              {currentStep >= 3 && (
-                <div className="space-y-3 text-xs">
-                  <div className="p-3 rounded bg-purple-950/40 border border-purple-500/40 text-purple-200 space-y-2">
-                    <div className="flex items-center gap-2 font-semibold text-white">
-                      <AlertCircle className="w-4 h-4 text-pink-400 animate-pulse" />
-                      <span>Legal Declaration & Signature Gate</span>
-                    </div>
-                    <p className="text-[11px] text-slate-300">
-                      The autonomous agent has populated all 14 form elements. As a legal guardrail, final submission requires citizen digital review.
-                    </p>
                     <button
-                      onClick={onTriggerHitlSignoff}
-                      className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-all cursor-pointer active:scale-95"
+                      type="button"
+                      onClick={() => setActivePortalView(activePortalView === 'login' ? 'form' : 'login')}
+                      className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                        activePortalView === 'login'
+                          ? 'bg-blue-600 text-white font-semibold'
+                          : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                      }`}
                     >
-                      <span>Open Review & Digital Signature Pad</span>
+                      <KeyRound className="w-3 h-3" />
+                      <span>Portal Login</span>
                     </button>
-                  </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActivePortalView('form')}
+                    className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors flex items-center gap-1 ${
+                      activePortalView === 'form'
+                        ? 'bg-blue-600 text-white font-semibold'
+                        : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <FileCheck className="w-3 h-3" />
+                    <span>Scheme Wizard</span>
+                  </button>
                 </div>
-              )}
-            </>
-          )}
-        </div>
+              </div>
+
+              {/* Viewport Frame Area */}
+              <div className="flex-1 bg-slate-950 relative overflow-hidden flex flex-col justify-center items-center">
+                {screenshotBase64 ? (
+                  /* Real Screencast Frame Received from Playwright */
+                  <div className="w-full h-full relative flex items-center justify-center p-2 bg-slate-950">
+                    <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-slate-950/85 backdrop-blur border border-emerald-500/50 rounded-full px-3 py-1 shadow-xl text-[11px] font-mono text-emerald-300">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
+                      <span className="font-bold">LIVE PLAYWRIGHT CHROMIUM</span>
+                    </div>
+                    <img
+                      src={`data:image/jpeg;base64,${screenshotBase64}`}
+                      alt="Live Playwright Browser Screencast"
+                      className="max-w-full max-h-full object-contain rounded-md shadow-2xl border border-slate-800"
+                    />
+                  </div>
+                ) : isExecuting ? (
+                  /* Active Execution Loading Frame */
+                  <div className="p-8 text-center space-y-4">
+                    <div className="relative mx-auto w-14 h-14">
+                      <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/30 flex items-center justify-center text-blue-400 animate-pulse">
+                        <Globe className="w-7 h-7" />
+                      </div>
+                      <span className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-950 animate-ping" />
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-sm font-bold text-white">Launching Stealth Chromium Session</h4>
+                      <p className="text-xs text-slate-400 font-mono">{selectedScheme?.portal_url || 'https://scholarships.gov.in'}</p>
+                      <p className="text-[11px] text-slate-500">Injecting human micro-jitter cadence & scanning inputs...</p>
+                    </div>
+                  </div>
+                ) : (
+                  /* Standby Interactive Portal Preview */
+                  <div className="p-4 w-full h-full overflow-y-auto font-sans text-slate-200 space-y-4">
+                    {/* View A: Portal Login Screen */}
+                    {activePortalView === 'login' ? (
+                      <div className="max-w-md mx-auto my-auto py-2 space-y-4">
+                        <div className="text-center border-b border-slate-800 pb-3">
+                          <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 mb-2">
+                            <KeyRound className="w-5 h-5" />
+                          </div>
+                          <h3 className="font-bold text-sm text-white">
+                            {selectedScheme?.name || 'National Scholarship Portal (NSP)'}
+                          </h3>
+                          <p className="text-[11px] text-slate-400">
+                            Official Government Applicant Login & Access Gateway
+                          </p>
+                        </div>
+
+                        <div className="space-y-3 text-xs bg-slate-950/70 p-3.5 rounded-xl border border-slate-800">
+                          <div>
+                            <label className="text-slate-400 block mb-1 font-medium">Application ID / Registered Email</label>
+                            <input
+                              type="text"
+                              value={loginUsername}
+                              onChange={(e) => setLoginUsername(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
+                              placeholder="e.g. citizen_applicant or email@portal.gov.in"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-slate-400 block mb-1 font-medium">Password / Access Passkey</label>
+                            <input
+                              type="password"
+                              value={loginPassword}
+                              onChange={(e) => setLoginPassword(e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
+                              placeholder="••••••••••••"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-slate-400 block mb-1 font-medium">Captcha Verification</label>
+                            <div className="flex items-center gap-2">
+                              <div className="px-3 py-1 bg-slate-900 border border-slate-700 rounded font-mono font-bold tracking-widest text-emerald-400 select-none text-sm">
+                                {captchaCode}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setCaptchaCode(Math.random().toString(36).slice(2, 7).toUpperCase())}
+                                className="p-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-colors"
+                                title="Refresh Captcha"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                              </button>
+                              <input
+                                type="text"
+                                defaultValue={captchaCode}
+                                className="flex-1 bg-slate-900 border border-slate-700/80 rounded px-2.5 py-1.5 text-slate-100 font-mono text-xs focus:outline-none focus:border-blue-500"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="pt-2 flex flex-col gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsLoggingIn(true);
+                                setTimeout(() => {
+                                  setIsLoggingIn(false);
+                                  setActivePortalView('form');
+                                }, 600);
+                              }}
+                              disabled={isLoggingIn}
+                              className="w-full py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-blue-500/20"
+                            >
+                              {isLoggingIn ? (
+                                <>
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Injecting Credentials via Playwright...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserCheck className="w-3.5 h-3.5" />
+                                  <span>Sign In to Portal & Open Wizard</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => setActivePortalView('form')}
+                              className="w-full py-1.5 text-[11px] text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
+                            >
+                              Skip Login (Fresh Registration Mode)
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Standby Wizard Form Preview */
+                      <div className="space-y-4">
+                        <div className="border-b border-slate-700/60 pb-3 flex items-start justify-between">
+                          <div>
+                            <h3 className="font-bold text-sm text-white">
+                              {selectedScheme ? selectedScheme.name : 'State Public Scholarship & Grant Portal'}
+                            </h3>
+                            <p className="text-[11px] text-slate-400">
+                              Official Application Form for Higher Education Financial Aid
+                            </p>
+                          </div>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                            Step {currentStep} of 3
+                          </span>
+                        </div>
+
+                        {/* Step 1 Preview */}
+                        <div className="space-y-3 text-xs">
+                          <div className="p-2.5 rounded bg-blue-950/30 border border-blue-800/40 text-[11px] text-blue-200 flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0" />
+                            <span>Ready to execute with Playwright stealth browser and live screencast.</span>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-slate-400 block mb-1">Full Legal Name</label>
+                              <input
+                                type="text"
+                                readOnly
+                                value={profile.full_name}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-medium"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-slate-400 block mb-1">National ID / Aadhaar</label>
+                              <input
+                                type="text"
+                                readOnly
+                                value={profile.national_id}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-slate-400 block mb-1">Contact Email</label>
+                              <input
+                                type="text"
+                                readOnly
+                                value={profile.email}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-slate-400 block mb-1">Phone Number</label>
+                              <input
+                                type="text"
+                                readOnly
+                                value={profile.phone || '9876543210'}
+                                className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-slate-100 font-mono"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {receipt && (
+                          <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/40 text-emerald-200 space-y-2.5 animate-in fade-in">
+                            <div className="flex items-center gap-2 font-semibold text-white">
+                              <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                              <span>Statutory Citizen Declaration Signed & Cryptographically Sealed</span>
+                            </div>
+                            <p className="text-[11px] text-slate-300">
+                              Your legal consent was verified and filed with the State Registry. Official Tracking ID:{' '}
+                              <strong className="font-mono text-emerald-300 font-bold">{receipt.tracking_number}</strong>.
+                            </p>
+                            {onOpenReceipt && (
+                              <button
+                                type="button"
+                                onClick={onOpenReceipt}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md shadow-emerald-500/20 active:scale-95"
+                              >
+                                <FileCheck className="w-3.5 h-3.5" />
+                                <span>View Tracking Receipt</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    )}
-  </div>
-</div>
-);
+    </div>
+  );
 };

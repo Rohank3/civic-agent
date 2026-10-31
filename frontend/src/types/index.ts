@@ -117,7 +117,7 @@ export interface TelemetryEvent {
   screenshot?: string | null;
   step?: number;
   fields_filled?: number;
-  pacing_mode?: "1x" | "2x" | "5x" | "turbo";
+  pacing_mode?: string;
 }
 
 export interface TrackingReceipt {
@@ -131,4 +131,21 @@ export interface TrackingReceipt {
   grant_amount?: number;
   screenshot_base64?: string;
   page_url?: string;
+}
+
+export interface AppliedScholarship {
+  id: string;
+  schemeId: string;
+  schemeName: string;
+  ministry: string;
+  grantAmount: number;
+  portalUrl: string;
+  trackingNumber: string;
+  caseId: string;
+  timestamp: string;
+  status: 'SUBMITTED' | 'UNDER_VERIFICATION' | 'APPROVED';
+  sha256Hash: string;
+  signatureDataUrl?: string;
+  receipt?: TrackingReceipt;
+  events?: TelemetryEvent[];
 }

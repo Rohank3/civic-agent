@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut } from 'lucide-react';
+import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut, Award } from 'lucide-react';
 import type { ActorRole, CitizenUser } from '../types';
 
 interface NavbarProps {
@@ -8,6 +8,9 @@ interface NavbarProps {
   onReset: () => void;
   currentUser?: CitizenUser | null;
   onLogout?: () => void;
+  onEditProfile?: () => void;
+  appliedCount?: number;
+  onOpenApplied?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ 
@@ -15,7 +18,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   activeActor, 
   onReset,
   currentUser,
-  onLogout
+  onLogout,
+  onEditProfile,
+  appliedCount = 0,
+  onOpenApplied,
 }) => {
   const getActorBadge = () => {
     switch (activeActor) {
@@ -88,14 +94,31 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>New Case</span>
           </button>
 
+          {/* Applied Scholarships Registry Button */}
+          {onOpenApplied && (
+            <button
+              onClick={onOpenApplied}
+              className="px-2.5 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-medium text-emerald-300 transition-colors flex items-center gap-1.5 cursor-pointer active:scale-95"
+              title="View all filed scholarship applications & receipts"
+            >
+              <Award className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Applied ({appliedCount})</span>
+            </button>
+          )}
+
           {/* Authenticated Citizen Profile & Logout */}
           {currentUser && (
             <div className="flex items-center gap-2 pl-1.5 border-l border-slate-800">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300">
+              <button
+                type="button"
+                onClick={onEditProfile}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 hover:border-blue-500/40 text-xs text-blue-300 transition-colors cursor-pointer"
+                title="Click to view and edit your Citizen Profile"
+              >
                 <User className="w-3.5 h-3.5 text-blue-400" />
                 <span className="font-semibold text-white max-w-[120px] truncate">{currentUser.fullName}</span>
                 <span className="text-[10px] text-blue-400/80 hidden lg:inline">({currentUser.username})</span>
-              </div>
+              </button>
               {onLogout && (
                 <button
                   type="button"

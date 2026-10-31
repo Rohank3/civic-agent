@@ -6,6 +6,8 @@ import { ViewportColumn } from './components/viewport/ViewportColumn';
 import { HitlModal } from './components/hitl/HitlModal';
 import { ReceiptModal } from './components/receipt/ReceiptModal';
 import { AddSchemeModal } from './components/intake/AddSchemeModal';
+import { EditProfileModal } from './components/intake/EditProfileModal';
+import { AppliedScholarshipsModal } from './components/applications/AppliedScholarshipsModal';
 import { LoginPage } from './components/auth/LoginPage';
 import type { 
   CitizenProfile, 
@@ -15,7 +17,8 @@ import type {
   TelemetryEvent, 
   TrackingReceipt, 
   ActorRole, 
-  ScholarshipScheme 
+  ScholarshipScheme,
+  AppliedScholarship
 } from './types';
 import { SAMPLE_PRESETS } from './lib/presets';
 import { 
@@ -23,12 +26,16 @@ import {
   parseDualDocuments, 
   submitDigitalSignature,
   createCustomScheme,
-  deleteCustomScheme
+  deleteCustomScheme,
+  saveCitizenProfile,
+  getCitizenProfile,
+  getAppliedScholarships,
+  saveAppliedScholarship,
+  executeLiveService,
+  controlAgent
 } from './lib/api';
 
 export const App: React.FC = () => {
-  const defaultPreset = SAMPLE_PRESETS[0];
-
   const [currentUser, setCurrentUser] = useState<CitizenUser | null>(() => {
     const stored = localStorage.getItem('civic_logged_in_user');
     if (stored) {
@@ -43,23 +50,60 @@ export const App: React.FC = () => {
 
   const userId = currentUser ? currentUser.id : 'user_anonymous';
 
-  const [profile, setProfile] = useState<CitizenProfile>(defaultPreset.profile);
+  // Load initial profile from stored user data, or blank initial profile
+  const [profile, setProfile] = useState<CitizenProfile>(() => {
+    if (currentUser?.profile) {
+      return currentUser.profile;
+    }
+    const storedProfile = localStorage.getItem(`civic_profile_${userId}`);
+    if (storedProfile) {
+      try {
+        return JSON.parse(storedProfile);
+      } catch {
+        // fallback
+      }
+    }
+    if (currentUser) {
+      return {
+        full_name: currentUser.fullName,
+        date_of_birth: '2003-01-01',
+        national_id: `ID-${currentUser.username.toUpperCase()}`,
+        email: currentUser.email,
+        phone: '9876543210',
+        address_street: '',
+        address_city: '',
+        address_state: 'Karnataka',
+        address_zip: '560001',
+        income_annual: 180000.0,
+        household_size: 4,
+        category: 'GENERAL',
+        attributes: {},
+      };
+    }
+    return SAMPLE_PRESETS[0].profile;
+  });
+
   const [dualDocResult, setDualDocResult] = useState<DualDocumentExtractionResult | null>(null);
   const [schemes, setSchemes] = useState<SchemeMatchResult[]>([]);
   const [selectedScheme, setSelectedScheme] = useState<ScholarshipScheme | null>(null);
+  const [appliedList, setAppliedList] = useState<AppliedScholarship[]>([]);
 
   const [events, setEvents] = useState<TelemetryEvent[]>([]);
   const [currentStage, setCurrentStage] = useState<string>('IDLE');
   const [activeActor, setActiveActor] = useState<ActorRole>('STUDENT_INTAKE');
-  const [pacingMode, setPacingMode] = useState<'1x' | '2x' | '5x' | 'turbo'>('1x');
+  const [pacingMode, setPacingMode] = useState<string>('1x');
   const [currentStep, setCurrentStep] = useState<number>(1);
   const [isExecuting, setIsExecuting] = useState<boolean>(false);
+  const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState<boolean>(false);
 
   const [hitlOpen, setHitlOpen] = useState<boolean>(false);
   const [receipt, setReceipt] = useState<TrackingReceipt | null>(null);
   const [receiptOpen, setReceiptOpen] = useState<boolean>(false);
   const [wsConnected, setWsConnected] = useState<boolean>(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
+  const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
+  const [isAppliedModalOpen, setIsAppliedModalOpen] = useState<boolean>(false);
 
   const caseIdRef = useRef<string>('case-2026-001');
   const wsRef = useRef<WebSocket | null>(null);
@@ -79,27 +123,86 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Initialize schemes and parse initial preset
+  // Initialize schemes and applied applications based on active user
   useEffect(() => {
     async function init() {
-      const matched = await matchSchemes(defaultPreset.profile, userId);
+      if (currentUser) {
+        // Load applied applications
+        const apps = await getAppliedScholarships(currentUser.id);
+        setAppliedList(apps);
+
+        // Load persisted profile
+        const persisted = await getCitizenProfile(currentUser.id);
+        if (persisted && persisted.full_name) {
+          setProfile(persisted);
+          const matched = await matchSchemes(persisted, currentUser.id);
+          setSchemes(matched);
+          if (matched.length > 0) {
+            setSelectedScheme(matched[0].scheme);
+          }
+          return;
+        }
+      }
+
+      const matched = await matchSchemes(profile, userId);
       setSchemes(matched);
       if (matched.length > 0) {
         setSelectedScheme(matched[0].scheme);
       }
-      const initialDocRes = await parseDualDocuments(defaultPreset.transcriptText, defaultPreset.incomeCertText);
-      setDualDocResult(initialDocRes);
     }
     init();
-  }, [defaultPreset, userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
-  const handleParseDocuments = async (transcript: string, income: string) => {
-    const res = await parseDualDocuments(transcript, income);
+  const handleParseDocuments = async (
+    transcript: string, 
+    income: string, 
+    transcriptName = 'academic_transcript.pdf', 
+    incomeName = 'income_certificate.pdf'
+  ) => {
+    const res = await parseDualDocuments(transcript, income, transcriptName, incomeName);
     setDualDocResult(res);
-    setProfile(res.auto_populated_profile);
-    const matched = await matchSchemes(res.auto_populated_profile, userId);
+
+    // Merge non-empty extracted fields into active citizen profile
+    const extracted = res.auto_populated_profile;
+    const updated: CitizenProfile = {
+      ...profile,
+      full_name: extracted.full_name && extracted.full_name !== 'Citizen Applicant' ? extracted.full_name : profile.full_name,
+      address_state: extracted.address_state || profile.address_state,
+      address_city: extracted.address_city || profile.address_city,
+      income_annual: res.verified_income !== null && res.verified_income > 0 ? res.verified_income : profile.income_annual,
+      national_id: extracted.national_id || profile.national_id,
+      attributes: {
+        ...profile.attributes,
+        ...extracted.attributes,
+        gpa: res.verified_gpa ?? profile.attributes.gpa,
+      },
+    };
+
+    setProfile(updated);
+    saveCitizenProfile(userId, updated);
+    const matched = await matchSchemes(updated, userId);
     setSchemes(matched);
     if (matched.length > 0) {
+      setSelectedScheme(matched[0].scheme);
+    }
+  };
+
+  const handleSaveEditedProfile = async (updated: CitizenProfile) => {
+    setProfile(updated);
+    saveCitizenProfile(userId, updated);
+    if (currentUser && currentUser.fullName !== updated.full_name) {
+      const updatedUser: CitizenUser = {
+        ...currentUser,
+        fullName: updated.full_name,
+        profile: updated,
+      };
+      setCurrentUser(updatedUser);
+      localStorage.setItem('civic_logged_in_user', JSON.stringify(updatedUser));
+    }
+    const matched = await matchSchemes(updated, userId);
+    setSchemes(matched);
+    if (matched.length > 0 && (!selectedScheme || !matched.some(m => m.scheme.id === selectedScheme.id))) {
       setSelectedScheme(matched[0].scheme);
     }
   };
@@ -121,13 +224,6 @@ export const App: React.FC = () => {
     if (selectedScheme?.id === schemeId && matched.length > 0) {
       setSelectedScheme(matched[0].scheme);
     }
-  };
-
-  const getPacingDelay = () => {
-    if (skipFlagRef.current || pacingMode === 'turbo') return 50;
-    if (pacingMode === '5x') return 250;
-    if (pacingMode === '2x') return 600;
-    return 1200; // 1x normal
   };
 
   const addTelemetryEvent = (
@@ -155,11 +251,28 @@ export const App: React.FC = () => {
     setActiveActor(actor);
   };
 
+  const handleTogglePause = () => {
+    if (isPaused) {
+      controlAgent(caseIdRef.current, 'resume');
+      setIsPaused(false);
+      addTelemetryEvent('EXECUTION_RESUMED', 'Operator resumed autonomous agent execution.', currentStage, activeActor);
+    } else {
+      controlAgent(caseIdRef.current, 'pause');
+      setIsPaused(true);
+      addTelemetryEvent('EXECUTION_PAUSED', 'Operator paused autonomous agent execution.', currentStage, activeActor);
+    }
+  };
+
+  const handleStepAdvance = () => {
+    controlAgent(caseIdRef.current, 'step');
+    addTelemetryEvent('STEP_SIGNALLED', 'Manual step-by-step advance triggered by operator.', currentStage, activeActor);
+  };
+
   const handleSkipTyping = () => {
-    skipFlagRef.current = true;
+    controlAgent(caseIdRef.current, 'skip');
     addTelemetryEvent(
       'CHAPTER_CUT_ACTIVATED',
-      'Fast-forward chapter cut triggered: skipping repetitive input typing and jumping to next milestone.',
+      'Fast-forward triggered: skipping typing delay on active page.',
       currentStage,
       activeActor
     );
@@ -170,153 +283,130 @@ export const App: React.FC = () => {
     setIsExecuting(true);
     setSelectedScheme(match.scheme);
     setCurrentStep(1);
+    setReceipt(null);
+    setCurrentScreenshot(null);
+    setIsPaused(false);
     skipFlagRef.current = false;
-    caseIdRef.current = `case-${Date.now().toString().slice(-6)}`;
+    setEvents([]);
 
-    // 1. Preflight Evaluation
-    addTelemetryEvent(
-      'PREFLIGHT_VERIFIED',
-      `Evaluated credentials for ${match.scheme.name}. Sufficiency score: ${(dualDocResult?.sufficiency_score || 0.98) * 100}%.`,
-      'PREFLIGHT',
-      'STUDENT_INTAKE'
-    );
+    const newCaseId = `case-${Date.now().toString(36)}`;
+    caseIdRef.current = newCaseId;
 
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
+    // Connect WebSocket for live telemetry & screencast streaming
+    try {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${window.location.host}/ws/telemetry/${newCaseId}`);
+      wsRef.current = ws;
 
-    // 2. Launching Stealth Chromium
-    addTelemetryEvent(
-      'SPINNING_BROWSER',
-      `Launching headless Chromium session with stealth evasion. Navigating to ${match.scheme.portal_url}...`,
-      'SPINNING_BROWSER',
-      'AUTONOMOUS_AGENT'
-    );
+      ws.onopen = () => {
+        setWsConnected(true);
+      };
 
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === 'telemetry') {
+            const eventItem: TelemetryEvent = {
+              type: 'telemetry',
+              case_id: msg.case_id || newCaseId,
+              timestamp: new Date().toISOString(),
+              actor: (msg.actor as ActorRole) || 'AUTONOMOUS_AGENT',
+              stage: msg.stage || 'NAVIGATING',
+              action: msg.action || 'STEP',
+              details: msg.details || '',
+              step: msg.step || 1,
+              fields_filled: msg.fields_filled,
+              screenshot: msg.screenshot,
+              pacing_mode: '1x',
+            };
 
-    // 3. Solving Obstacles (Modal Notice)
-    addTelemetryEvent(
-      'OBSTACLE_RESOLVED',
-      'Detected obstructive cookie notice & regulatory alert modal. Automatically accepted terms and cleared overlay.',
-      'SOLVING_OBSTACLES',
-      'AUTONOMOUS_AGENT',
-      1
-    );
+            setEvents((prev) => [...prev, eventItem]);
 
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
+            if (msg.stage) setCurrentStage(msg.stage);
+            if (msg.actor) setActiveActor(msg.actor as ActorRole);
+            if (msg.step) setCurrentStep(msg.step);
+            if (msg.screenshot) setCurrentScreenshot(msg.screenshot);
 
-    // 4. Populating Step 1 Inputs
-    addTelemetryEvent(
-      'FORM_POPULATED',
-      `Populated 6 applicant demographic inputs (Full Name: ${profile.full_name}, ID: ${profile.national_id}).`,
-      'POPULATING_FORM',
-      'AUTONOMOUS_AGENT',
-      1,
-      6
-    );
+            // Handle HITL Signature gate pause
+            if (msg.stage === 'AWAITING_CITIZEN_REVIEW' || msg.action === 'AWAITING_CITIZEN_SIGNATURE') {
+              setHitlOpen(true);
+            }
 
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
+            // Handle Final Submission Receipt
+            if (msg.stage === 'SUBMITTED' && msg.receipt) {
+              setReceipt(msg.receipt);
+              setIsExecuting(false);
+              setReceiptOpen(true);
 
-    // 5. Advancing to Step 2
-    setCurrentStep(2);
-    addTelemetryEvent(
-      'WIZARD_ADVANCED',
-      'Step 1 validations cleared; advanced wizard to Step 2 (Financials & Document Proofs).',
-      'NAVIGATING',
-      'AUTONOMOUS_AGENT',
-      2
-    );
+              const appRecord: AppliedScholarship = {
+                id: `app_${Date.now()}`,
+                schemeId: match.scheme.id,
+                schemeName: match.scheme.name,
+                ministry: match.scheme.ministry,
+                grantAmount: match.scheme.grant_amount_annual,
+                portalUrl: match.scheme.portal_url,
+                trackingNumber: msg.receipt.tracking_number,
+                caseId: newCaseId,
+                timestamp: msg.receipt.timestamp || new Date().toISOString(),
+                status: 'SUBMITTED',
+                sha256Hash: msg.receipt.sha256_hash,
+                receipt: msg.receipt,
+                events: [...events, eventItem],
+              };
+              setAppliedList((prev) => [appRecord, ...prev]);
+              saveAppliedScholarship(userId, appRecord);
+            }
 
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
+            if (msg.stage === 'ERROR') {
+              setIsExecuting(false);
+            }
+          }
+        } catch (e) {
+          console.warn('Telemetry WS parse error:', e);
+        }
+      };
 
-    // 6. Step 2 Upload & Income Mapping
-    addTelemetryEvent(
-      'DOCUMENT_ATTACHED',
-      'Uploaded verified Academic_Transcript.pdf and family income certificate (REV/INC/2026/8819).',
-      'POPULATING_FORM',
-      'AUTONOMOUS_AGENT',
-      2,
-      10
-    );
+      ws.onclose = () => setWsConnected(false);
+    } catch (e) {
+      console.warn('WS initialization error:', e);
+    }
 
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
-
-    // 7. Advancing to Step 3 (Review Step)
-    setCurrentStep(3);
-    addTelemetryEvent(
-      'WIZARD_ADVANCED',
-      'Step 2 completed; advanced to Step 3: Pre-submission verification and final declaration.',
-      'NAVIGATING',
-      'AUTONOMOUS_AGENT',
-      3
-    );
-
-    await new Promise((r) => setTimeout(r, getPacingDelay()));
-
-    // 8. Self-Reflection Input Audit
-    addTelemetryEvent(
-      'SELF_REFLECTION_VERIFIED',
-      'Self-reflection audit complete: verified all 14 interactive DOM controls match verified student record.',
-      'SELF_REFLECTION',
-      'AUTONOMOUS_AGENT',
-      3
-    );
-
-    await new Promise((r) => setTimeout(r, getPacingDelay() / 2));
-
-    // 9. Pause for HITL Review
-    addTelemetryEvent(
-      'AWAITING_CITIZEN_SIGNATURE',
-      'Reached final statutory declaration step. Pausing execution for explicit citizen digital signature.',
-      'AWAITING_CITIZEN_REVIEW',
-      'CITIZEN_HITL',
-      3
-    );
-
-    setHitlOpen(true);
+    // Launch Genuine Playwright Browser Execution Session
+    try {
+      await executeLiveService({
+        service_id: match.scheme.id,
+        portal_url: match.scheme.portal_url,
+        profile: profile,
+        documents: [],
+      });
+    } catch (e) {
+      console.error('Failed to launch live Playwright agent:', e);
+      addTelemetryEvent(
+        'EXECUTION_FALLBACK',
+        'Backend connection offline. Please ensure API gateway is running on :8000 via run_dev.bat.',
+        'ERROR',
+        'AUTONOMOUS_AGENT'
+      );
+      setIsExecuting(false);
+    }
   };
 
   const handleAuthorizeSubmission = async (signatureDataUrl: string) => {
     setHitlOpen(false);
 
-    // 10. Digital Signature Authorized
     addTelemetryEvent(
       'SIGNATURE_AUTHORIZED',
-      'Citizen digital signature received and verified. Authorizing Playwright agent to commit final submission.',
+      'Citizen digital signature received and verified. Signaling Playwright agent to commit final submission.',
       'SUBMITTING',
       'CITIZEN_HITL',
-      3
+      currentStep
     );
 
+    // Signals the live agent in backend to commit and extract receipt
     await submitDigitalSignature(caseIdRef.current, signatureDataUrl);
-    await new Promise((r) => setTimeout(r, 600));
-
-    // 11. Final Submission Confirmed
-    const trackingNo = `PUB-REC-2026-${Math.floor(10000 + Math.random() * 90000)}`;
-    const sha256 = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
-
-    const newReceipt: TrackingReceipt = {
-      tracking_number: trackingNo,
-      case_id: caseIdRef.current,
-      timestamp: new Date().toISOString(),
-      sha256_hash: sha256,
-      service_id: selectedScheme ? selectedScheme.id : 'state_scholarship',
-      student_name: profile.full_name,
-      scheme_title: selectedScheme ? selectedScheme.name : 'Higher Education Scholarship',
-      grant_amount: selectedScheme?.grant_amount_annual || 25000,
-    };
-
-    setReceipt(newReceipt);
-
-    addTelemetryEvent(
-      'RECEIPT_EXTRACTED',
-      `Application confirmed by State Authority! Official Tracking ID: ${trackingNo}. SHA-256 digest sealed.`,
-      'SUBMITTED',
-      'GOVERNMENT_AUTHORITY',
-      3
-    );
-
-    setIsExecuting(false);
-    setReceiptOpen(true);
   };
 
   const handleReset = () => {
@@ -339,19 +429,50 @@ export const App: React.FC = () => {
           localStorage.setItem('civic_logged_in_user', JSON.stringify(user));
           if (user.profile) {
             setProfile(user.profile);
+            saveCitizenProfile(user.id, user.profile);
+            matchSchemes(user.profile, user.id).then((matched) => {
+              setSchemes(matched);
+              if (matched.length > 0) {
+                setSelectedScheme(matched[0].scheme);
+              }
+            });
           }
+          getAppliedScholarships(user.id).then((list) => setAppliedList(list));
         }}
         onContinueAsGuest={() => {
+          const guestProfile: CitizenProfile = {
+            full_name: 'Guest Citizen',
+            date_of_birth: '2002-01-01',
+            national_id: 'ID-GUEST-2026',
+            email: 'guest@civicagent.gov.in',
+            phone: '9876543210',
+            address_street: 'Central Secretariat',
+            address_city: 'New Delhi',
+            address_state: 'Delhi',
+            address_zip: '110001',
+            income_annual: 200000.0,
+            household_size: 4,
+            category: 'GENERAL',
+            attributes: {},
+          };
           const guest: CitizenUser = {
             id: 'user_guest',
             username: 'guest_citizen',
             fullName: 'Guest Citizen',
-            email: 'guest@civicagent.gov',
+            email: 'guest@civicagent.gov.in',
             role: 'applicant',
             authMethod: 'demo',
+            profile: guestProfile,
           };
           setCurrentUser(guest);
+          setProfile(guestProfile);
           localStorage.setItem('civic_logged_in_user', JSON.stringify(guest));
+          matchSchemes(guestProfile, guest.id).then((matched) => {
+            setSchemes(matched);
+            if (matched.length > 0) {
+              setSelectedScheme(matched[0].scheme);
+            }
+          });
         }}
       />
     );
@@ -369,6 +490,9 @@ export const App: React.FC = () => {
           localStorage.removeItem('civic_logged_in_user');
           setCurrentUser(null);
         }}
+        onEditProfile={() => setIsEditProfileOpen(true)}
+        appliedCount={appliedList.length}
+        onOpenApplied={() => setIsAppliedModalOpen(true)}
       />
 
       {/* 3-Column Split-Screen Cockpit Layout */}
@@ -384,6 +508,9 @@ export const App: React.FC = () => {
             isExecuting={isExecuting}
             onOpenAddModal={() => setIsAddModalOpen(true)}
             onDeleteCustomScheme={handleDeleteCustomScheme}
+            onOpenEditProfile={() => setIsEditProfileOpen(true)}
+            appliedCount={appliedList.length}
+            onOpenAppliedModal={() => setIsAppliedModalOpen(true)}
           />
         </section>
 
@@ -403,15 +530,50 @@ export const App: React.FC = () => {
             pacingMode={pacingMode}
             setPacingMode={setPacingMode}
             onSkipTyping={handleSkipTyping}
-            screenshotBase64={null}
+            screenshotBase64={currentScreenshot}
             currentStep={currentStep}
             profile={profile}
             selectedScheme={selectedScheme}
             isExecuting={isExecuting}
             onTriggerHitlSignoff={() => setHitlOpen(true)}
+            receipt={receipt}
+            onOpenReceipt={() => setReceiptOpen(true)}
+            isPaused={isPaused}
+            onTogglePause={handleTogglePause}
+            onStepAdvance={handleStepAdvance}
           />
         </section>
       </main>
+
+      {/* Applied Scholarships Registry Modal */}
+      <AppliedScholarshipsModal
+        isOpen={isAppliedModalOpen}
+        onClose={() => setIsAppliedModalOpen(false)}
+        applications={appliedList}
+        onOpenReceipt={(r) => {
+          setReceipt(r);
+          setReceiptOpen(true);
+        }}
+        onReplayRecording={(app) => {
+          const found = schemes.find((s) => s.scheme.id === app.schemeId);
+          if (found) {
+            setSelectedScheme(found.scheme);
+          }
+          if (app.receipt) {
+            setReceipt(app.receipt);
+          }
+          setCurrentStep(3);
+          setCurrentStage('SUBMITTED');
+        }}
+      />
+
+      {/* Citizen Profile Live Editor Modal */}
+      <EditProfileModal
+        isOpen={isEditProfileOpen}
+        onClose={() => setIsEditProfileOpen(false)}
+        profile={profile}
+        onSave={handleSaveEditedProfile}
+      />
 
       {/* Human-in-the-Loop Sign-off Modal */}
       <HitlModal

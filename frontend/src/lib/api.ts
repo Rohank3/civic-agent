@@ -2,7 +2,8 @@ import type {
   ScholarshipScheme, 
   SchemeMatchResult, 
   CitizenProfile, 
-  DualDocumentExtractionResult 
+  DualDocumentExtractionResult,
+  AppliedScholarship
 } from '../types';
 
 const API_BASE = '/v1';
@@ -261,64 +262,244 @@ export async function parseDualDocuments(
   const authMatch = incomeCertText.match(/(?:Issued By|Issuing Authority|Office of)[\t :]+([A-Za-z\s,.-]{4,60})/i);
   const stateMatch = incomeCertText.match(/(?:State)[\t :]+([A-Za-z\s]{3,30})/i);
 
-  const gpa = gpaMatch ? parseFloat(gpaMatch[1]) : 3.85;
-  const percentage = pctMatch ? parseFloat(pctMatch[1]) : 82.5;
-  const studentName = nameMatch ? nameMatch[1].trim() : 'Aarav Sharma';
-  const annualIncome = incMatch ? parseFloat(incMatch[1].replace(/,/g, '')) : 180000.0;
-  const certNo = certMatch ? certMatch[1].trim() : 'REV/INC/2026/8819';
-  const major = majorMatch ? majorMatch[1].trim() : 'Computer Science and Engineering';
-  const inst = instMatch ? instMatch[1].trim() : 'State Institute of Technology';
-  const state = stateMatch ? stateMatch[1].trim() : 'Karnataka';
+  const gpa = gpaMatch ? parseFloat(gpaMatch[1]) : null;
+  const percentage = pctMatch ? parseFloat(pctMatch[1]) : null;
+  const studentName = nameMatch ? nameMatch[1].trim() : null;
+  const annualIncome = incMatch ? parseFloat(incMatch[1].replace(/,/g, '')) : null;
+  const certNo = certMatch ? certMatch[1].trim() : null;
+  const major = majorMatch ? majorMatch[1].trim() : null;
+  const inst = instMatch ? instMatch[1].trim() : null;
+  const state = stateMatch ? stateMatch[1].trim() : null;
+
+  const warnings: string[] = [];
+  let sufficiency = 1.0;
+  if (!studentName) {
+    warnings.push('Applicant Name not found in document text.');
+    sufficiency -= 0.15;
+  }
+  if (annualIncome === null) {
+    warnings.push('Annual income could not be parsed from certificate.');
+    sufficiency -= 0.25;
+  }
+  if (!gpa && !percentage) {
+    warnings.push('Academic GPA or percentage was not detected.');
+    sufficiency -= 0.20;
+  }
 
   return {
     transcript: {
       student_name: studentName,
-      roll_number: rollMatch ? rollMatch[1].trim() : '2024CS-1092',
+      roll_number: rollMatch ? rollMatch[1].trim() : null,
       institution: inst,
       gpa,
       percentage,
       major,
-      confidence: 0.95,
+      confidence: gpa || percentage ? 0.95 : 0.40,
       raw_text: transcriptText,
     },
     income_certificate: {
       certificate_number: certNo,
       applicant_name: studentName,
       annual_income: annualIncome,
-      issuing_authority: authMatch ? authMatch[1].trim() : 'Office of the Tahsildar',
+      issuing_authority: authMatch ? authMatch[1].trim() : null,
       state,
-      district: 'Bangalore Urban',
-      confidence: 0.96,
+      district: null,
+      confidence: annualIncome !== null ? 0.95 : 0.40,
       raw_text: incomeCertText,
     },
     name_match: true,
     verified_income: annualIncome,
     verified_gpa: gpa,
-    sufficiency_score: 0.98,
-    warnings: [],
+    sufficiency_score: Math.max(0.1, Math.min(1.0, sufficiency)),
+    warnings,
     auto_populated_profile: {
-      full_name: studentName,
-      date_of_birth: '2003-05-12',
-      national_id: `AADHAAR-${certNo}`,
-      email: `${studentName.toLowerCase().replace(/ /g, '.')}@university.edu`,
-      phone: '9876543210',
-      address_street: '14 MG Road, Civil Station',
-      address_city: 'Bengaluru',
-      address_state: state,
-      address_zip: '560001',
-      income_annual: annualIncome,
-      household_size: 4,
-      category: 'OBC',
+      full_name: studentName || 'Citizen Applicant',
+      date_of_birth: '2003-01-01',
+      national_id: certNo ? `ID-${certNo}` : '',
+      email: studentName ? `${studentName.toLowerCase().replace(/\s+/g, '.')}@university.edu` : '',
+      phone: '',
+      address_street: '',
+      address_city: '',
+      address_state: state || '',
+      address_zip: '',
+      income_annual: annualIncome ?? 0,
+      household_size: 1,
+      category: 'GENERAL',
       attributes: {
-        gpa,
-        percentage,
-        major,
-        institution: inst,
-        roll_number: rollMatch ? rollMatch[1].trim() : '2024CS-1092',
-        certificate_number: certNo,
+        gpa: gpa || undefined,
+        percentage: percentage || undefined,
+        major: major || undefined,
+        institution: inst || undefined,
+        roll_number: rollMatch ? rollMatch[1].trim() : undefined,
+        certificate_number: certNo || undefined,
       },
     },
   };
+}
+
+export async function getMeriPehchaanConfig(): Promise<{
+  configured: boolean;
+  client_id?: string;
+  auth_url: string;
+  redirect_uri: string;
+  provider: string;
+  governing_body: string;
+  sandbox_mode: boolean;
+  instructions: string;
+}> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/meripehchaan/config`);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    console.warn('Backend meripehchaan config endpoint unreachable', e);
+  }
+  return {
+    configured: false,
+    auth_url: 'https://meripehchaan.gov.in/oauth2/authorize',
+    redirect_uri: window.location.origin + '/auth/meripehchaan/callback',
+    provider: 'MeriPehchaan (National Single Sign-On / NSSO)',
+    governing_body: 'National Informatics Centre (NIC) / NeGD / MeitY',
+    sandbox_mode: true,
+    instructions: 'Local sandbox mode active. Authenticate with verified citizen inputs or DigiLocker documents.',
+  };
+}
+
+export async function saveCitizenProfile(userId: string, profile: CitizenProfile): Promise<void> {
+  try {
+    localStorage.setItem(`civic_profile_${userId}`, JSON.stringify(profile));
+    await fetch(`${API_BASE}/citizen/profile/${encodeURIComponent(userId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    });
+  } catch (e) {
+    console.warn('Could not persist profile to server, saved locally', e);
+  }
+}
+
+export async function registerCitizen(data: {
+  username: string;
+  fullName: string;
+  email: string;
+  password: string;
+  nationalId?: string;
+  addressState?: string;
+  addressCity?: string;
+  phone?: string;
+  incomeAnnual?: number;
+  category?: string;
+}): Promise<{ id: string; username: string; fullName: string; email: string; role: 'applicant'; authMethod: 'password'; profile: CitizenProfile }> {
+  const payload = {
+    username: data.username,
+    full_name: data.fullName,
+    email: data.email,
+    password: data.password,
+    national_id: data.nationalId || '',
+    address_state: data.addressState || 'Karnataka',
+    address_city: data.addressCity || '',
+    phone: data.phone || '9876543210',
+    income_annual: data.incomeAnnual || 180000.0,
+    category: data.category || 'GENERAL',
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Failed to register account');
+    }
+    const result = await res.json();
+    return result.user;
+  } catch (err: any) {
+    console.warn('Backend register endpoint error, using local sandbox profile:', err);
+    // Local storage fallback for offline / disconnected sandbox
+    const user_id = `user_${data.username.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const profile: CitizenProfile = {
+      full_name: data.fullName,
+      date_of_birth: '2003-01-01',
+      national_id: data.nationalId || `ID-${data.username.toUpperCase()}`,
+      email: data.email,
+      phone: data.phone || '9876543210',
+      address_street: '',
+      address_city: data.addressCity || '',
+      address_state: data.addressState || 'Karnataka',
+      address_zip: '560001',
+      income_annual: data.incomeAnnual || 180000.0,
+      household_size: 4,
+      category: data.category || 'GENERAL',
+      attributes: {},
+    };
+    saveCitizenProfile(user_id, profile);
+    return {
+      id: user_id,
+      username: data.username,
+      fullName: data.fullName,
+      email: data.email,
+      role: 'applicant',
+      authMethod: 'password',
+      profile,
+    };
+  }
+}
+
+export async function loginCitizen(username: string, password: string): Promise<{ id: string; username: string; fullName: string; email: string; role: 'applicant'; authMethod: 'password'; profile: CitizenProfile }> {
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Login failed');
+    }
+    const result = await res.json();
+    return result.user;
+  } catch (err: any) {
+    // Fallback checking local profiles
+    const userId = `user_${username.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+    const local = localStorage.getItem(`civic_profile_${userId}`);
+    if (local) {
+      const p = JSON.parse(local);
+      return {
+        id: userId,
+        username,
+        fullName: p.full_name || username,
+        email: p.email || `${username}@gmail.com`,
+        role: 'applicant',
+        authMethod: 'password',
+        profile: p,
+      };
+    }
+    throw err;
+  }
+}
+
+export async function getCitizenProfile(userId: string): Promise<CitizenProfile | null> {
+  try {
+    const res = await fetch(`${API_BASE}/citizen/profile/${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.full_name) {
+        return data as CitizenProfile;
+      }
+    }
+  } catch {
+    // fallback to local storage
+  }
+  try {
+    const raw = localStorage.getItem(`civic_profile_${userId}`);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return null;
 }
 
 export async function submitDigitalSignature(caseId: string, signatureDataUrl: string): Promise<boolean> {
@@ -337,3 +518,70 @@ export async function submitDigitalSignature(caseId: string, signatureDataUrl: s
     return true; // allow client simulation
   }
 }
+
+export async function getAppliedScholarships(userId: string): Promise<AppliedScholarship[]> {
+  try {
+    const res = await fetch(`${API_BASE}/citizen/applications/${encodeURIComponent(userId)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        return data as AppliedScholarship[];
+      }
+    }
+  } catch {
+    // fallback to localStorage
+  }
+  try {
+    const local = localStorage.getItem(`civic_applied_schemes_${userId}`);
+    return local ? JSON.parse(local) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function saveAppliedScholarship(userId: string, app: AppliedScholarship): Promise<void> {
+  try {
+    const existing = await getAppliedScholarships(userId);
+    const updated = [app, ...existing.filter((a) => a.trackingNumber !== app.trackingNumber)];
+    localStorage.setItem(`civic_applied_schemes_${userId}`, JSON.stringify(updated));
+
+    await fetch(`${API_BASE}/citizen/applications/${encodeURIComponent(userId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(app),
+    });
+  } catch (e) {
+    console.warn('Failed to save application to server, saved locally', e);
+  }
+}
+
+export async function executeLiveService(payload: {
+  service_id: string;
+  portal_url: string;
+  profile: CitizenProfile;
+  documents?: Array<{ name: string; kind: string; content: string }>;
+}): Promise<{ status: string; case_id: string; service_id: string; portal_url: string; telemetry_ws: string }> {
+  const res = await fetch(`${API_BASE}/services/execute-live`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to launch live Playwright agent session');
+  }
+  return await res.json();
+}
+
+export async function controlAgent(caseId: string, action: string, mode?: string): Promise<void> {
+  try {
+    await fetch(`${API_BASE}/services/${encodeURIComponent(caseId)}/control`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, mode }),
+    });
+  } catch (e) {
+    console.warn('Agent control error:', e);
+  }
+}
+
