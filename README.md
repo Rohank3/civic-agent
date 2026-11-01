@@ -13,8 +13,7 @@ pinned: false
 > **Track**: Civic Pulse, Digital Governance & Public Information  
 > **Problem Spectrum**: Autonomous Public Service & Bureaucracy Execution Agent  
 > **Repository**: [https://github.com/Rohank3/civic-agent](https://github.com/Rohank3/civic-agent) (Public)  
-> **Live Prototype**: [https://civic-agent-alpha.vercel.app](https://civic-agent-alpha.vercel.app)  
-> **Submission Document**: [SUBMISSION.md](SUBMISSION.md) | **Pitch Deck**: [PITCH_DECK.md](PITCH_DECK.md)
+> **Live Prototype**: [https://civic-agent-alpha.vercel.app](https://civic-agent-alpha.vercel.app)
 
 An autonomous web/browser execution agent powered by Playwright and FastAPI that ingests a student's demographic profile, queries live open government data (`data.gov.in`) for active statutory scholarships, extracts verified academic criteria via multimodal OCR, navigates complex multi-step legacy portals, populates application forms, handles UI obstacles, and returns completed tracking receipts with cryptographic SHA-256 audit proofs.
 
@@ -44,9 +43,9 @@ An autonomous web/browser execution agent powered by Playwright and FastAPI that
    - Pauses on final legal declarations for explicit citizen digital signature via HTML5 canvas pad.
    - Extracts official government tracking numbers and produces tamper-evident SHA-256 cryptographic audit receipts with downloadable PDF export.
 
-5. **Official Sample Documents for Judges**:
+5. **Official Sample Documents for Testing**:
    - Includes real Playwright-generated academic marksheets and statutory income certificates in `/sample_documents/` and `/public/samples/`.
-   - Allows judges to test real end-to-end PDF drag-and-drop extraction with 100% sufficiency scores.
+   - Allows users and evaluators to test real end-to-end PDF drag-and-drop extraction with 100% sufficiency scores.
 
 6. **Production Containerization**:
    - Single-container multi-stage `Dockerfile` serving both the React Frontend Cockpit and FastAPI Backend with Playwright headless Chromium on a single port for zero-friction cloud deployment (Google Cloud Run / Render / Railway).
