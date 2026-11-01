@@ -85,14 +85,19 @@ class VisionLocator:
             if resp and resp.status_code == 200:
                 raw = resp.json()["candidates"][0]["content"]["parts"][0]["text"]
                 data = json.loads(raw)
-                return Point(x=float(data["x"]), y=float(data["y"]))
+                raw_x = float(data.get("x", 0.5))
+                raw_y = float(data.get("y", 0.5))
+                # Support both 0-1 and 0-1000 coordinate scales
+                norm_x = min(1.0, max(0.0, raw_x / 1000.0 if raw_x > 1.0 else raw_x))
+                norm_y = min(1.0, max(0.0, raw_y / 1000.0 if raw_y > 1.0 else raw_y))
+                return Point(x=norm_x, y=norm_y)
         except Exception as exc:
             logger.debug(f"Gemini vision locate fallback notice: {exc}")
 
         return None
 
     async def click_grounded(self, page: Page, label: str) -> bool:
-        """Find point via vision and perform human-cadence click."""
+        """Find point via vision and perform human-cadence click with viewport and DPI scaling."""
         point = await self.locate(page, label)
         if not point:
             return False

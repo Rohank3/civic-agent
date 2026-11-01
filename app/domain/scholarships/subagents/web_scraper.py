@@ -234,7 +234,12 @@ class ScholarshipScraperSubagent:
         return schemes
 
     async def fetch_live_schemes_from_web(self) -> tuple[list[ScholarshipScheme], str | None]:
-        """Asynchronously connect to National Scholarship Portal and extract actual live schemes."""
+        """Asynchronously connect to National Scholarship Portal and extract actual live schemes with resilient SSL handling."""
+        import ssl
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+
         try:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(self.timeout, connect=5.0),
@@ -242,7 +247,8 @@ class ScholarshipScraperSubagent:
                     "User-Agent": USER_AGENT,
                     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
                 },
-                follow_redirects=True
+                follow_redirects=True,
+                verify=ssl_ctx
             ) as client:
                 resp = await client.get(NSP_ALL_SCHOLARSHIPS_URL)
                 if resp.status_code == 200 and len(resp.text) > 1000:
