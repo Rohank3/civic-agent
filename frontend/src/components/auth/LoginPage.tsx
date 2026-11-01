@@ -98,94 +98,119 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
     onLogin(user);
   };
 
-  // 1-Click Fast Login for Hackathon Judges / Evaluators
+  // 1-Click Fast Evaluator Login: direct SQLite authentication
   const handleEvaluatorFastLogin = async () => {
     setIsLoading(true);
     setErrorMessage('');
     try {
       const user = await loginCitizen('evaluator', 'Evaluator@2026');
-      await proceedWithLogin(user);
+      if (user && user.id) {
+        await proceedWithLogin(user);
+      } else {
+        setErrorMessage('Evaluator credentials not configured on backend.');
+        setIsLoading(false);
+      }
     } catch (err: any) {
+      setErrorMessage(err?.message || 'Backend is currently unreachable. Please wait a moment and retry.');
       setIsLoading(false);
-      setErrorMessage(err.message || 'Evaluator fast login failed. Please ensure the backend is running.');
     }
   };
 
-  // Handle Sign In submission
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginUsername.trim() || !loginPassword.trim()) {
-      setErrorMessage('Please enter both your Username and Password');
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!loginUsername.trim() || !loginPassword) {
+      setErrorMessage('Please enter both your citizen username and password.');
       return;
     }
-    setErrorMessage('');
-    setIsLoading(true);
 
+    setIsLoading(true);
     try {
       const user = await loginCitizen(loginUsername.trim(), loginPassword);
-      await proceedWithLogin(user);
+      if (user && user.id) {
+        setSuccessMessage('Credentials verified. Entering CivicAgent Cockpit...');
+        await proceedWithLogin(user);
+      } else {
+        setErrorMessage('Invalid citizen username or password. Please verify your credentials or register.');
+        setIsLoading(false);
+      }
     } catch (err: any) {
+      setErrorMessage(err?.message || 'Network error connecting to backend auth service.');
       setIsLoading(false);
-      setErrorMessage(err.message || 'Unable to sign in. Please verify your credentials or sign up.');
     }
   };
 
-  // Handle Sign Up submission
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!regUsername.trim() || !regFullName.trim() || !regEmail.trim() || !regPassword.trim()) {
-      setErrorMessage('Please fill in all required fields (Name, Username, Email, Password).');
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (!regFullName.trim() || !regUsername.trim() || !regEmail.trim() || !regPassword || !regState.trim()) {
+      setErrorMessage('Please fill in all mandatory fields (Name, Username, Email, Password, Domicile State).');
       return;
     }
+
     if (regPassword.length < 4) {
       setErrorMessage('Password must be at least 4 characters long.');
       return;
     }
-    setErrorMessage('');
-    setIsLoading(true);
 
+    const incomeNum = regIncome ? parseFloat(regIncome) : 180000;
+    if (isNaN(incomeNum) || incomeNum < 0) {
+      setErrorMessage('Please enter a valid annual income amount.');
+      return;
+    }
+
+    setIsLoading(true);
     try {
       const user = await registerCitizen({
         username: regUsername.trim(),
         fullName: regFullName.trim(),
         email: regEmail.trim(),
         password: regPassword,
-        nationalId: regNationalId.trim(),
-        addressState: regState.trim() || 'Karnataka',
-        incomeAnnual: regIncome ? parseFloat(regIncome) : 180000.0,
+        nationalId: regNationalId.trim() || undefined,
+        addressState: regState.trim(),
+        incomeAnnual: incomeNum,
         category: regCategory,
       });
-      setSuccessMessage('Account registered successfully! Opening your cockpit...');
-      await proceedWithLogin(user);
+
+      if (user && user.id) {
+        setSuccessMessage('Citizen account successfully registered in SQLite database!');
+        await proceedWithLogin(user);
+      } else {
+        setErrorMessage('Registration failed. That username may already be taken.');
+        setIsLoading(false);
+      }
     } catch (err: any) {
+      setErrorMessage(err?.message || 'Registration server error. Please try again.');
       setIsLoading(false);
-      setErrorMessage(err.message || 'Registration failed. Username might already be in use.');
     }
   };
 
-  // Submit authentic MeriPehchaan / DigiLocker login
   const handleDigiLockerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!meriFullName.trim()) {
-      setErrorMessage('Please enter your full legal name as per Aadhaar / DigiLocker');
+    setErrorMessage('');
+
+    if (!meriFullName.trim() || !meriAadhaar.trim() || !meriState.trim()) {
+      setErrorMessage('Please provide your Full Name, Aadhaar/ID, and Domicile State.');
       return;
     }
-    setErrorMessage('');
-    setIsLoading(true);
 
-    const cleanId = meriAadhaar.trim() || `AADHAAR-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const emailAddr = meriEmail.trim() || `${meriFullName.toLowerCase().replace(/\s+/g, '.')}@gmail.com`;
-    const incomeNum = meriIncome ? parseFloat(meriIncome) : 180000.0;
+    const cleanId = meriAadhaar.trim().toUpperCase();
+    const emailAddr = meriEmail.trim() || `${cleanId.toLowerCase().replace(/[^a-z0-9]/g, '')}@digilocker.gov.in`;
+    const incomeNum = meriIncome ? parseFloat(meriIncome) : 180000;
 
     const profile: CitizenProfile = {
-      full_name: meriFullName.trim(),
-      date_of_birth: '2002-05-15',
       national_id: cleanId,
+      full_name: meriFullName.trim(),
+      date_of_birth: '2003-01-01',
       email: emailAddr,
       phone: '9876543210',
       address_street: '',
       address_city: '',
-      address_state: meriState.trim() || 'Karnataka',
+      address_state: meriState.trim(),
       address_zip: '560001',
       income_annual: incomeNum,
       household_size: 4,
@@ -209,94 +234,90 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans">
-      {/* Background Glow Blobs */}
-      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Main Login Card */}
-      <div className="w-full max-w-lg bg-slate-900/90 border border-slate-800 rounded-2xl shadow-2xl backdrop-blur-xl p-6 sm:p-8 z-10">
+    <div className="min-h-screen bg-white text-[#09090b] flex flex-col justify-center items-center p-4 relative font-sans">
+      {/* Main Login Card (Efferd Clean Minimalist Style) */}
+      <div className="w-full max-w-md rounded-lg border border-[#e4e4e7] bg-white p-6 shadow-sm z-10 text-[#09090b]">
         {/* Brand Header */}
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 shadow-xl shadow-blue-500/25 mb-3">
-            <ShieldCheck className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center size-10 rounded-md bg-[#18181b] text-white mb-3 shadow-xs">
+            <ShieldCheck className="size-5" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+          <h1 className="text-lg font-semibold tracking-tight text-[#09090b]">
             CivicAgent Citizen Portal
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-[#71717a] mt-0.5">
             Autonomous Higher Education Grant & Bureaucracy Execution Platform
           </p>
         </div>
 
         {/* Hackathon Evaluation Fast Gate */}
-        <div className="mb-5 p-3 rounded-xl bg-gradient-to-r from-indigo-950/70 via-blue-950/40 to-slate-900 border border-indigo-500/40 flex items-center justify-between gap-3 shadow-sm">
+        <div className="mb-4 p-3 rounded-md bg-[#fafafa] border border-[#e4e4e7] flex items-center justify-between gap-3">
           <div>
-            <div className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <div className="text-xs font-medium text-[#09090b] flex items-center gap-1.5">
+              <Sparkles className="size-3.5 text-amber-500" />
               <span>Judging Panel Quick Access</span>
             </div>
-            <div className="text-[11px] text-slate-400 mt-0.5">
-              Pre-seeded SQLite Evaluator account (<code className="text-indigo-300 font-mono">evaluator</code>)
+            <div className="text-[11px] text-[#71717a] mt-0.5">
+              Pre-seeded SQLite Evaluator account (<code className="bg-white px-1 py-0.2 rounded border border-[#e4e4e7] text-[#09090b] font-mono text-[10px]">evaluator</code>)
             </div>
           </div>
           <button
             type="button"
             onClick={handleEvaluatorFastLogin}
             disabled={isLoading}
-            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold text-xs shadow-md shadow-indigo-500/25 flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 disabled:opacity-50 shrink-0"
+            className="h-7 px-2.5 rounded-md bg-[#18181b] hover:bg-[#27272a] text-white font-medium text-xs shadow-xs flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 shrink-0"
           >
-            <span>⚡ 1-Click Evaluator Login</span>
+            <span>⚡ 1-Click Login</span>
           </button>
         </div>
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-3 gap-1 p-1 bg-slate-950/60 rounded-xl border border-slate-800/80 mb-5 text-xs font-medium">
+        <div className="grid grid-cols-3 gap-0.5 p-0.5 bg-[#f4f4f5] rounded-md border border-[#e4e4e7] mb-4 text-xs font-medium">
           <button
             type="button"
             onClick={() => { setActiveTab('credentials'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
+            className={`py-1.5 px-1 rounded text-center transition-colors cursor-pointer ${
               activeTab === 'credentials'
-                ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-white text-[#18181b] shadow-xs'
+                : 'text-[#71717a] hover:text-[#09090b]'
             }`}
           >
-            Citizen Sign In / Up
+            Sign In / Up
           </button>
           <button
             type="button"
             onClick={() => { setActiveTab('digilocker'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
+            className={`py-1.5 px-1 rounded text-center transition-colors cursor-pointer ${
               activeTab === 'digilocker'
-                ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-white text-[#18181b] shadow-xs'
+                : 'text-[#71717a] hover:text-[#09090b]'
             }`}
           >
-            MeriPehchaan SSO
+            MeriPehchaan
           </button>
           <button
             type="button"
             onClick={() => { setActiveTab('demo'); setErrorMessage(''); setSuccessMessage(''); }}
-            className={`py-2 px-1 rounded-lg text-center transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
+            className={`py-1.5 px-1 rounded text-center transition-colors cursor-pointer ${
               activeTab === 'demo'
-                ? 'bg-blue-600 text-white shadow-sm font-semibold'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                ? 'bg-white text-[#18181b] shadow-xs'
+                : 'text-[#71717a] hover:text-[#09090b]'
             }`}
           >
-            Evaluator Credentials
+            Evaluator
           </button>
         </div>
 
         {/* Status / Error Alerts */}
         {errorMessage && (
-          <div className="mb-4 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
-            <Info className="w-4 h-4 shrink-0" />
+          <div className="mb-3.5 p-2.5 rounded-md bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+            <Info className="size-4 shrink-0" />
             <span>{errorMessage}</span>
           </div>
         )}
         {successMessage && (
-          <div className="mb-4 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <div className="mb-3.5 p-2.5 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs flex items-center gap-2">
+            <CheckCircle2 className="size-4 shrink-0" />
             <span>{successMessage}</span>
           </div>
         )}
@@ -305,8 +326,8 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
         {activeTab === 'credentials' && (
           <div>
             {/* Sub-mode Toggle (Sign In vs Sign Up) */}
-            <div className="flex border-b border-slate-800 mb-4 pb-2 justify-between items-center text-xs">
-              <span className="font-semibold text-white">
+            <div className="flex border-b border-[#e4e4e7] mb-3.5 pb-2 justify-between items-center text-xs">
+              <span className="font-medium text-[#09090b]">
                 {citizenAuthMode === 'signin' ? 'Sign In to Your Account' : 'Create New Citizen Account'}
               </span>
               <button
@@ -315,46 +336,46 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                   setCitizenAuthMode(citizenAuthMode === 'signin' ? 'signup' : 'signin');
                   setErrorMessage('');
                 }}
-                className="text-blue-400 hover:text-blue-300 font-medium underline cursor-pointer"
+                className="text-[#18181b] hover:underline font-medium cursor-pointer transition-colors"
               >
-                {citizenAuthMode === 'signin' ? 'Need an account? Sign Up →' : 'Already registered? Sign In →'}
+                {citizenAuthMode === 'signin' ? 'Sign Up →' : 'Sign In →'}
               </button>
             </div>
 
             {/* Sub-form A: Sign In */}
             {citizenAuthMode === 'signin' && (
-              <form onSubmit={handleSignInSubmit} className="space-y-4">
-                <div className="space-y-3 text-xs">
+              <form onSubmit={handleSignInSubmit} className="space-y-3.5">
+                <div className="space-y-2.5 text-xs">
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Citizen Username or ID *
                     </label>
                     <div className="relative">
-                      <User className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                      <User className="size-3.5 text-[#a1a1aa] absolute left-3 top-2.5" />
                       <input
                         type="text"
                         required
                         value={loginUsername}
                         onChange={(e) => setLoginUsername(e.target.value)}
                         placeholder="Enter your registered username"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 pl-9 pr-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="h-9 w-full bg-white border border-[#e4e4e7] rounded-md py-1.5 pl-8 pr-3 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Password / Passkey *
                     </label>
                     <div className="relative">
-                      <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
+                      <KeyRound className="size-3.5 text-[#a1a1aa] absolute left-3 top-2.5" />
                       <input
                         type="password"
                         required
                         value={loginPassword}
                         onChange={(e) => setLoginPassword(e.target.value)}
                         placeholder="Enter your password"
-                        className="w-full bg-slate-950 border border-slate-700 rounded-xl py-2 pl-9 pr-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                        className="h-9 w-full bg-white border border-[#e4e4e7] rounded-md py-1.5 pl-8 pr-3 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                       />
                     </div>
                   </div>
@@ -363,18 +384,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium text-sm shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                  className="w-full h-9 rounded-md bg-[#18181b] hover:bg-[#27272a] text-white font-medium text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-40"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                       <span>Authenticating Account...</span>
                     </>
                   ) : (
                     <>
-                      <LogIn className="w-4 h-4" />
+                      <LogIn className="size-3.5" />
                       <span>Sign In & Open Cockpit</span>
-                      <ArrowRight className="w-4 h-4 ml-1" />
+                      <ArrowRight className="size-3.5 ml-0.5" />
                     </>
                   )}
                 </button>
@@ -383,10 +404,10 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
 
             {/* Sub-form B: Sign Up */}
             {citizenAuthMode === 'signup' && (
-              <form onSubmit={handleSignUpSubmit} className="space-y-3.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <form onSubmit={handleSignUpSubmit} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Full Legal Name *
                     </label>
                     <input
@@ -395,12 +416,12 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                       value={regFullName}
                       onChange={(e) => setRegFullName(e.target.value)}
                       placeholder="e.g. Rohan Kumar"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Choose Username *
                     </label>
                     <input
@@ -409,14 +430,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                       value={regUsername}
                       onChange={(e) => setRegUsername(e.target.value)}
                       placeholder="e.g. rohan_k"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] font-mono placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Registered Email *
                     </label>
                     <input
@@ -425,41 +446,41 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="e.g. rohan@gmail.com"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
-                      Password (min 4 chars) *
+                    <label className="block text-[#71717a] mb-1 font-medium">
+                      Password *
                     </label>
                     <input
                       type="password"
                       required
                       value={regPassword}
                       onChange={(e) => setRegPassword(e.target.value)}
-                      placeholder="Choose a password"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      placeholder="Choose password"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
-                      Aadhaar / National ID (Optional)
+                    <label className="block text-[#71717a] mb-1 font-medium">
+                      Aadhaar / National ID
                     </label>
                     <input
                       type="text"
                       value={regNationalId}
                       onChange={(e) => setRegNationalId(e.target.value)}
                       placeholder="e.g. AADHAAR-1234-5678"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] font-mono placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Domicile State *
                     </label>
                     <input
@@ -468,15 +489,15 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                       value={regState}
                       onChange={(e) => setRegState(e.target.value)}
                       placeholder="e.g. Karnataka, Delhi"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
-                      Annual Family Income (₹)
+                    <label className="block text-[#71717a] mb-1 font-medium">
+                      Annual Income (₹)
                     </label>
                     <input
                       type="number"
@@ -485,18 +506,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                       value={regIncome}
                       onChange={(e) => setRegIncome(e.target.value)}
                       placeholder="e.g. 180000"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] font-mono placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                     />
                   </div>
 
                   <div>
-                    <label className="block font-medium text-slate-300 mb-1">
+                    <label className="block text-[#71717a] mb-1 font-medium">
                       Category
                     </label>
                     <select
                       value={regCategory}
                       onChange={(e) => setRegCategory(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-2.5 text-slate-100 focus:outline-none focus:border-blue-500"
+                      className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2 text-[#09090b] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                     >
                       <option value="GENERAL">GENERAL</option>
                       <option value="OBC">OBC</option>
@@ -510,18 +531,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-medium text-sm shadow-lg shadow-emerald-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+                  className="w-full h-9 rounded-md bg-[#18181b] hover:bg-[#27272a] text-white font-medium text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-40"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="size-3.5 animate-spin" />
                       <span>Creating Account & Seeding Profile...</span>
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-4 h-4" />
+                      <UserPlus className="size-3.5" />
                       <span>Create Citizen Account & Launch Cockpit</span>
-                      <ArrowRight className="w-4 h-4 ml-1" />
+                      <ArrowRight className="size-3.5 ml-0.5" />
                     </>
                   )}
                 </button>
@@ -532,21 +553,21 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
 
         {/* Tab 2: MeriPehchaan National SSO */}
         {activeTab === 'digilocker' && (
-          <form onSubmit={handleDigiLockerSubmit} className="space-y-4">
-            <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-indigo-200 text-xs space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-white">
-                <Globe className="w-4 h-4 text-cyan-400" />
+          <form onSubmit={handleDigiLockerSubmit} className="space-y-3.5">
+            <div className="p-3 rounded-md bg-[#fafafa] border border-[#e4e4e7] text-[#71717a] text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-medium text-[#09090b]">
+                <Globe className="size-3.5 text-[#71717a]" />
                 <span>MeriPehchaan (National SSO) Federation</span>
               </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                India's National Single Sign-On (NeGD / MeitY / NIC) integrates DigiLocker, Jan Parichay, and e-Pramaan.
+              <p className="text-[11px] leading-relaxed">
+                India's National Single Sign-On integrates DigiLocker, Jan Parichay, and e-Pramaan.
                 Enter your authentic citizen credentials below to instantiate your live profile with <strong>zero mock data</strong>.
               </p>
               {meriConfig?.configured && (
                 <div className="pt-1">
                   <a
                     href={meriConfig.auth_url}
-                    className="inline-flex items-center gap-1 text-[11px] text-cyan-300 underline font-semibold hover:text-cyan-200"
+                    className="inline-flex items-center gap-1 text-[11px] text-[#18181b] underline font-medium hover:text-black"
                   >
                     <span>Launch Live NIC Gateway Authorization →</span>
                   </a>
@@ -554,81 +575,81 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
               <div>
-                <label className="block font-medium text-slate-300 mb-1">
+                <label className="block text-[#71717a] mb-1 font-medium">
                   Citizen Legal Name *
                 </label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+                  <User className="size-3.5 text-[#a1a1aa] absolute left-2.5 top-2" />
                   <input
                     type="text"
                     required
                     value={meriFullName}
                     onChange={(e) => setMeriFullName(e.target.value)}
                     placeholder="e.g. Rohan Kumar"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-8 pr-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md pl-7 pr-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-slate-300 mb-1">
+                <label className="block text-[#71717a] mb-1 font-medium">
                   Aadhaar / DigiLocker ID *
                 </label>
                 <div className="relative">
-                  <Fingerprint className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+                  <Fingerprint className="size-3.5 text-[#a1a1aa] absolute left-2.5 top-2" />
                   <input
                     type="text"
                     required
                     value={meriAadhaar}
                     onChange={(e) => setMeriAadhaar(e.target.value)}
                     placeholder="e.g. AADHAAR-9012-3456"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-8 pr-2.5 text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md pl-7 pr-2.5 text-[#09090b] font-mono placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
               <div>
-                <label className="block font-medium text-slate-300 mb-1">
+                <label className="block text-[#71717a] mb-1 font-medium">
                   Registered Email
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+                  <Mail className="size-3.5 text-[#a1a1aa] absolute left-2.5 top-2" />
                   <input
                     type="email"
                     value={meriEmail}
                     onChange={(e) => setMeriEmail(e.target.value)}
                     placeholder="e.g. rohank@gmail.com"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-8 pr-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md pl-7 pr-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block font-medium text-slate-300 mb-1">
+                <label className="block text-[#71717a] mb-1 font-medium">
                   Domicile State *
                 </label>
                 <div className="relative">
-                  <MapPin className="w-4 h-4 text-slate-500 absolute left-2.5 top-2.5" />
+                  <MapPin className="size-3.5 text-[#a1a1aa] absolute left-2.5 top-2" />
                   <input
                     type="text"
                     required
                     value={meriState}
                     onChange={(e) => setMeriState(e.target.value)}
-                    placeholder="e.g. Karnataka, Assam, Delhi"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 pl-8 pr-2.5 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                    placeholder="e.g. Karnataka, Delhi"
+                    className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md pl-7 pr-2.5 text-[#09090b] placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs font-normal"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
               <div>
-                <label className="block font-medium text-slate-300 mb-1">
-                  Annual Household Income (₹)
+                <label className="block text-[#71717a] mb-1 font-medium">
+                  Annual Income (₹)
                 </label>
                 <input
                   type="number"
@@ -637,18 +658,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
                   value={meriIncome}
                   onChange={(e) => setMeriIncome(e.target.value)}
                   placeholder="e.g. 180000"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-3 text-slate-100 font-mono placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                  className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2.5 text-[#09090b] font-mono placeholder-[#a1a1aa] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                 />
               </div>
 
               <div>
-                <label className="block font-medium text-slate-300 mb-1">
-                  Reservation Category
+                <label className="block text-[#71717a] mb-1 font-medium">
+                  Category
                 </label>
                 <select
                   value={meriCategory}
                   onChange={(e) => setMeriCategory(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg py-2 px-2.5 text-slate-100 focus:outline-none focus:border-blue-500"
+                  className="h-8 w-full bg-white border border-[#e4e4e7] rounded-md px-2 text-[#09090b] focus:outline-none focus:ring-1 focus:ring-[#18181b] text-xs"
                 >
                   <option value="GENERAL">GENERAL</option>
                   <option value="OBC">OBC</option>
@@ -662,18 +683,18 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-medium text-sm shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-full h-9 rounded-md bg-[#18181b] hover:bg-[#27272a] text-white font-medium text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-40"
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Verifying Citizen Credentials...</span>
+                  <Loader2 className="size-3.5 animate-spin" />
+                  <span>Verifying Credentials...</span>
                 </>
               ) : (
                 <>
-                  <Fingerprint className="w-4 h-4" />
+                  <Fingerprint className="size-3.5" />
                   <span>Authenticate with MeriPehchaan & Open Cockpit</span>
-                  <ArrowRight className="w-4 h-4 ml-1" />
+                  <ArrowRight className="size-3.5 ml-0.5" />
                 </>
               )}
             </button>
@@ -682,31 +703,31 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
 
         {/* Tab 3: Official Evaluator Judging Credentials & Fast Access */}
         {activeTab === 'demo' && (
-          <div className="space-y-3.5 text-xs">
-            <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-slate-300 space-y-2">
-              <div className="flex items-center gap-1.5 font-bold text-white text-sm">
-                <Sparkles className="w-4 h-4 text-amber-400" />
+          <div className="space-y-3 text-xs">
+            <div className="p-3 rounded-md bg-[#fafafa] border border-[#e4e4e7] text-[#71717a] space-y-2">
+              <div className="flex items-center gap-1.5 font-medium text-[#09090b] text-xs">
+                <Sparkles className="size-3.5 text-amber-500" />
                 <span>Judging Panel Verification Guide</span>
               </div>
-              <p className="text-[11px] text-slate-300 leading-relaxed">
-                To comply with the <strong className="text-emerald-400">Zero Dummy Data Policy</strong>, this application requires live database authentication and ingests authentic statutory documents via live Gemini OCR.
+              <p className="text-[11px] leading-relaxed">
+                To comply with the <strong className="text-emerald-700">Zero Dummy Data Policy</strong>, this application requires live database authentication and ingests authentic statutory documents via live Gemini OCR.
               </p>
-              <div className="bg-slate-950/70 p-2.5 rounded-lg border border-slate-800 space-y-1 font-mono text-[11px]">
+              <div className="bg-white p-2.5 rounded border border-[#e4e4e7] space-y-1 font-mono text-[11px]">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Evaluator Username:</span>
-                  <span className="text-indigo-300 font-bold">evaluator</span>
+                  <span className="text-[#71717a]">Evaluator Username:</span>
+                  <span className="text-[#09090b] font-medium">evaluator</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Evaluator Password:</span>
-                  <span className="text-indigo-300 font-bold">Evaluator@2026</span>
+                  <span className="text-[#71717a]">Evaluator Password:</span>
+                  <span className="text-[#09090b] font-medium">Evaluator@2026</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Database Engine:</span>
-                  <span className="text-emerald-400">SQLite (civicagent.db WAL)</span>
+                  <span className="text-[#71717a]">Database Engine:</span>
+                  <span className="text-emerald-700 font-medium">SQLite (civicagent.db WAL)</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">OCR Engine:</span>
-                  <span className="text-cyan-400">Gemini 3.5 Flash Multimodal</span>
+                  <span className="text-[#71717a]">OCR Engine:</span>
+                  <span className="text-[#09090b] font-medium">Gemini 3.5 Flash Multimodal</span>
                 </div>
               </div>
             </div>
@@ -715,32 +736,32 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
               type="button"
               onClick={handleEvaluatorFastLogin}
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-blue-600 to-cyan-600 hover:from-indigo-500 hover:to-cyan-500 text-white font-medium text-sm shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-full h-9 rounded-md bg-[#18181b] hover:bg-[#27272a] text-white font-medium text-xs shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-colors disabled:opacity-40"
             >
-              <LogIn className="w-4 h-4" />
+              <LogIn className="size-3.5" />
               <span>Log In as Verified Evaluator Judge</span>
-              <ArrowRight className="w-4 h-4 ml-1" />
+              <ArrowRight className="size-3.5 ml-0.5" />
             </button>
           </div>
         )}
 
         {/* Footer Guarantee & Optional Guest Link */}
-        <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <Lock className="w-3.5 h-3.5 text-blue-400" />
+        <div className="mt-5 pt-3.5 border-t border-[#e4e4e7] flex items-center justify-between text-xs text-[#71717a]">
+          <div className="flex items-center gap-1.5">
+            <Lock className="size-3" />
             <span>256-bit Encrypted Session</span>
           </div>
           {onContinueAsGuest && (
             <button
               type="button"
               onClick={onContinueAsGuest}
-              className="text-[11px] text-slate-500 hover:text-slate-300 active:text-white transition-colors cursor-pointer rounded-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400"
+              className="text-[11px] text-[#71717a] hover:text-[#09090b] underline transition-colors cursor-pointer"
             >
               Guest Preview
             </button>
           )}
-          <div className="flex items-center gap-1 text-[11px] text-emerald-400">
-            <CheckCircle2 className="w-3.5 h-3.5" />
+          <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+            <CheckCircle2 className="size-3" />
             <span>Zero Mock Forcing</span>
           </div>
         </div>
@@ -748,24 +769,24 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onContinueAsGuest
 
       {/* Render Free Tier Cold-Start Waiting Overlay */}
       {isWarmingUp && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="bg-slate-900 border border-blue-500/40 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center space-y-4">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/20 text-blue-400 mx-auto">
-              <Loader2 className="w-6 h-6 animate-spin" />
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#e4e4e7] rounded-lg p-5 max-w-sm w-full shadow-xl text-center space-y-3 text-[#09090b]">
+            <div className="inline-flex items-center justify-center size-10 rounded-md bg-[#f4f4f5] text-[#18181b] mx-auto border border-[#e4e4e7]">
+              <Loader2 className="size-5 animate-spin" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Connecting to CivicAgent Engine</h3>
-              <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+              <h3 className="text-sm font-semibold text-[#09090b]">Connecting to CivicAgent Engine</h3>
+              <p className="text-xs text-[#71717a] mt-1 leading-relaxed">
                 Cloud container is waking from standby (Render Free Tier spin-up). Initializing Playwright Chromium runtime...
               </p>
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-2 overflow-hidden">
+            <div className="w-full bg-[#f4f4f5] rounded-full h-1.5 overflow-hidden border border-[#e4e4e7]">
               <div
-                className="bg-gradient-to-r from-blue-500 via-indigo-500 to-cyan-400 h-full transition-all duration-500"
+                className="bg-[#18181b] h-full transition-all duration-500"
                 style={{ width: `${Math.min(95, Math.max(10, warmupSeconds * 3.5))}%` }}
               />
             </div>
-            <div className="text-[11px] text-slate-400 font-mono">
+            <div className="text-[11px] text-[#71717a] font-mono">
               Standby timer: {warmupSeconds}s • Entering Cockpit automatically
             </div>
           </div>

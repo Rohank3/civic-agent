@@ -8,18 +8,18 @@ import {
   ChevronUp, 
   User, 
   Award, 
-  Sparkles,
-  ShieldCheck,
-  PlusCircle,
-  Trash2,
-  KeyRound,
-  Globe,
-  Edit2,
-  AlertTriangle,
-  ShieldAlert,
-  ExternalLink,
-  RefreshCw,
-  Layers
+  Sparkles, 
+  ShieldCheck, 
+  PlusCircle, 
+  Trash2, 
+  KeyRound, 
+  Globe, 
+  Edit2, 
+  AlertTriangle, 
+  ShieldAlert, 
+  ExternalLink, 
+  RefreshCw, 
+  Layers 
 } from 'lucide-react';
 import type { CitizenProfile, SchemeMatchResult, DualDocumentExtractionResult } from '../../types';
 import { SAMPLE_PRESETS } from '../../lib/presets';
@@ -95,7 +95,6 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
         reader.onload = () => resolve(reader.result as string);
         reader.readAsText(file);
       } else {
-        // Read as DataURL and extract pure Base64
         reader.onload = () => {
           const result = reader.result as string;
           const commaIndex = result.indexOf(',');
@@ -175,7 +174,6 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
         setUploadedTranscriptName(transcriptName);
         setUploadedIncomeName(incomeName);
 
-        // Fetch authentic binary PDF samples and convert to base64 for live multimodal OCR
         const [tRes, iRes] = await Promise.all([fetch(transcriptPath), fetch(incomePath)]);
         if (tRes.ok && iRes.ok) {
           const [tBlob, iBlob] = await Promise.all([tRes.blob(), iRes.blob()]);
@@ -189,7 +187,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
         }
       }
     } catch (err) {
-      console.error('Failed to load authentic sample PDF', err);
+      console.error('Failed to load sample document', err);
     } finally {
       setIsParsing(false);
     }
@@ -198,22 +196,22 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
   const sufficiency = dualDocResult ? Math.round(dualDocResult.sufficiency_score * 100) : null;
 
   return (
-    <div className="flex flex-col h-full bg-slate-900/60 rounded-xl border border-slate-800 overflow-hidden font-sans">
+    <div className="flex flex-col h-full bg-[#141C27] rounded-xl border border-[#263244] overflow-hidden shadow-xs font-sans">
       {/* Column Header */}
-      <div className="p-3.5 border-b border-slate-800 bg-slate-900/80 flex items-center justify-between">
+      <div className="px-4 py-3 border-b border-[#263244] bg-[#101720] flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs border border-amber-500/30">
+          <span className="w-5 h-5 rounded-md bg-blue-600 text-white flex items-center justify-center font-bold text-xs">
             1
-          </div>
-          <h2 className="font-semibold text-sm text-slate-100">Upload-Driven Intake & Schemes</h2>
+          </span>
+          <h2 className="font-semibold text-sm text-[#F1F5F9]">Intake & Matching</h2>
         </div>
-        <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
-          <CheckCircle2 className="w-3 h-3" />
-          <span>Zero Dummy Data</span>
+        <span className="text-xs text-emerald-400 font-medium flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+          <span>Verified Registry</span>
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {/* Hidden native file inputs */}
         <input
           ref={transcriptInputRef}
@@ -232,22 +230,20 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
 
         {/* Zero-Knowledge Vault Active Banner */}
         {isVaultActive && (
-          <div className="p-3 rounded-xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-slate-900 border border-emerald-500/40 flex items-center justify-between gap-2 shadow-sm animate-in fade-in">
+          <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/25 flex items-center justify-between gap-2 shadow-xs">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30 shrink-0">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
+              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-xs text-white">
-                    Zero-Knowledge Vault Active
+                  <span className="font-semibold text-xs text-emerald-300">
+                    Encrypted Document Vault Active
                   </span>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono font-bold">
+                  <span className="text-[11px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono font-medium">
                     AES-256-GCM
                   </span>
                 </div>
-                <span className="text-[10px] text-emerald-300/90 block">
-                  Documents encrypted in local vault • Reusable across all applications without re-uploading
+                <span className="text-xs text-emerald-400/90 block">
+                  Documents persist in encrypted local vault • Reusable across applications
                 </span>
               </div>
             </div>
@@ -255,7 +251,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
               <button
                 type="button"
                 onClick={onClearVault}
-                className="px-2 py-1 text-[10px] rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 font-medium"
+                className="px-2 py-1 text-xs rounded bg-[#141C27] hover:bg-[#192333] border border-emerald-500/30 text-emerald-300 transition-colors cursor-pointer font-medium"
                 title="Wipe cached documents from local encrypted vault"
               >
                 Clear
@@ -264,41 +260,25 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
           </div>
         )}
 
-        {/* Multimodal Document Upload Cards */}
-        <div className="p-3.5 rounded-xl border border-slate-700/60 bg-slate-800/40 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-              <Upload className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Upload Official Documents</span>
-              {isParsing && (
-                <span className="text-[10px] text-indigo-400 animate-pulse font-normal">
-                  (Parsing with Gemini & PyPDF...)
-                </span>
-              )}
-            </span>
-            <div className="flex items-center gap-1.5 text-[10px]">
-              <a
-                href="/samples/Official_Transcript_Eleanor_Vance.pdf"
-                download="Official_Transcript_Eleanor_Vance.pdf"
-                className="text-cyan-400 hover:text-cyan-300 active:text-cyan-500 underline font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-400 rounded-sm"
-                title="Download sample student marksheet PDF to test live upload"
-              >
-                Sample Marksheet
-              </a>
-              <span className="text-slate-600">•</span>
-              <a
-                href="/samples/Statutory_Income_Certificate_Eleanor_Vance.pdf"
-                download="Statutory_Income_Certificate_Eleanor_Vance.pdf"
-                className="text-emerald-400 hover:text-emerald-300 active:text-emerald-500 underline font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded-sm"
-                title="Download sample income certificate PDF to test live upload"
-              >
-                Sample Income Cert
-              </a>
+        {/* Document Upload Section */}
+        <div className="p-4 rounded-xl border border-[#263244] bg-[#101720]/60 space-y-3">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <span className="text-xs font-semibold text-[#F1F5F9] flex items-center gap-1.5">
+                <Upload className="w-3.5 h-3.5 text-blue-400" />
+                <span>Supporting Documents</span>
+              </span>
+              <p className="text-xs text-[#94A3B8] mt-0.5">Upload official records for criteria extraction</p>
             </div>
+            {isParsing && (
+              <span className="text-xs text-blue-400 animate-pulse font-medium bg-blue-500/10 px-2 py-0.5 rounded border border-blue-500/20">
+                Parsing documents...
+              </span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {/* Academic Transcript Card */}
+            {/* Academic Marksheet Card */}
             <div
               role="button"
               tabIndex={0}
@@ -309,22 +289,22 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                   transcriptInputRef.current?.click();
                 }
               }}
-              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-blue-500 bg-slate-900/50 hover:bg-slate-900/80 active:bg-slate-900 flex flex-col items-center justify-center text-center cursor-pointer transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 active:scale-[0.99]"
+              className="p-3 rounded-lg border border-dashed border-[#263244] hover:border-blue-500/50 bg-[#141C27] hover:bg-[#192333] flex flex-col items-center justify-center text-center cursor-pointer transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
-              <FileText className="w-6 h-6 text-blue-400 group-hover:scale-110 transition-transform mb-1.5" />
-              <span className="text-xs font-medium text-slate-200">
+              <FileText className="w-5 h-5 text-blue-400 mb-1.5" />
+              <span className="text-xs font-medium text-[#F1F5F9]">
                 {uploadedTranscriptName ? (
-                  <span className="text-blue-300 font-semibold truncate max-w-[140px] block">
+                  <span className="text-blue-400 font-semibold truncate max-w-[140px] block">
                     {uploadedTranscriptName}
                   </span>
                 ) : (
-                  'Upload Transcript'
+                  'Academic Marksheet'
                 )}
               </span>
-              <span className="text-[10px] text-slate-400 mt-0.5">
+              <span className="text-xs text-[#94A3B8] mt-0.5">
                 {profile.attributes.gpa || profile.attributes.percentage
-                  ? `Score: ${profile.attributes.gpa || profile.attributes.percentage}% • Parsed`
-                  : 'Click or drop PDF to extract'}
+                  ? `Score: ${profile.attributes.gpa || profile.attributes.percentage}% • Extracted`
+                  : 'Click or drop PDF / image'}
               </span>
             </div>
 
@@ -339,32 +319,29 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                   incomeInputRef.current?.click();
                 }
               }}
-              className="p-3 rounded-lg border border-dashed border-slate-600 hover:border-emerald-500 bg-slate-900/50 hover:bg-slate-900/80 active:bg-slate-900 flex flex-col items-center justify-center text-center cursor-pointer transition-all group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 active:scale-[0.99]"
+              className="p-3 rounded-lg border border-dashed border-[#263244] hover:border-emerald-500/50 bg-[#141C27] hover:bg-[#192333] flex flex-col items-center justify-center text-center cursor-pointer transition-colors group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
-              <ShieldCheck className="w-6 h-6 text-emerald-400 group-hover:scale-110 transition-transform mb-1.5" />
-              <span className="text-xs font-medium text-slate-200">
+              <ShieldCheck className="w-5 h-5 text-emerald-400 mb-1.5" />
+              <span className="text-xs font-medium text-[#F1F5F9]">
                 {uploadedIncomeName ? (
-                  <span className="text-emerald-300 font-semibold truncate max-w-[140px] block">
+                  <span className="text-emerald-400 font-semibold truncate max-w-[140px] block">
                     {uploadedIncomeName}
                   </span>
                 ) : (
-                  'Upload Income Proof'
+                  'Income Certificate'
                 )}
               </span>
-              <span className="text-[10px] text-slate-400 mt-0.5">
+              <span className="text-xs text-[#94A3B8] mt-0.5">
                 {profile.income_annual
                   ? `₹${profile.income_annual.toLocaleString()} • Verified`
-                  : 'Click or drop PDF to verify'}
+                  : 'Click or drop PDF / image'}
               </span>
             </div>
           </div>
 
-          {/* Quick Evaluator Benchmark Extraction Button */}
-          <div className="flex items-center justify-between gap-2 p-2 rounded-lg bg-slate-900/60 border border-slate-700/60 flex-wrap">
-            <div className="flex items-center gap-1.5 text-[11px] text-slate-300">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-              <span>Judge Testing Shortcut:</span>
-            </div>
+          {/* Quick Benchmark Extraction Button */}
+          <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg bg-[#141C27] border border-[#263244] text-xs flex-wrap">
+            <span className="text-slate-400 font-medium">Test Document Preset:</span>
             <button
               type="button"
               onClick={async () => {
@@ -373,19 +350,20 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                 }
               }}
               disabled={isExecuting || isParsing}
-              className="px-2.5 py-1 rounded bg-indigo-600/30 hover:bg-indigo-600/50 active:bg-indigo-600/70 border border-indigo-500/40 text-indigo-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40"
-              title="Stream authentic sample marksheet & income certificate PDFs to Gemini 3.5 Flash OCR live"
+              className="px-2.5 py-1 rounded bg-[#192333] hover:bg-[#202c40] border border-[#263244] text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+              title="Load benchmark documents for instant testing"
             >
-              <span>⚡ Load Benchmark PDF & Run Live Gemini OCR</span>
+              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+              <span>Load Benchmark (Aarav Sharma)</span>
             </button>
           </div>
 
           {/* Sufficiency Score Gauge */}
-          <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-700/40">
-            <span className="text-slate-400">Pre-flight Sufficiency Score:</span>
+          <div className="pt-2 flex items-center justify-between text-xs border-t border-[#263244]">
+            <span className="text-slate-400 font-medium">Pre-flight Eligibility Score:</span>
             {sufficiency !== null ? (
-              <div className="flex items-center gap-1.5">
-                <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-2 bg-[#192333] rounded-full overflow-hidden">
                   <div 
                     className={`h-full rounded-full transition-all duration-500 ${
                       sufficiency >= 80 ? 'bg-emerald-500' : 'bg-amber-500'
@@ -393,33 +371,33 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                     style={{ width: `${sufficiency}%` }}
                   />
                 </div>
-                <span className="font-bold text-emerald-400 text-xs">{sufficiency}%</span>
+                <span className="font-bold text-[#F1F5F9] text-xs">{sufficiency}%</span>
               </div>
             ) : (
-              <span className="text-[11px] text-slate-500 italic">Upload documents to verify</span>
+              <span className="text-xs text-slate-500 italic">Upload documents to verify criteria</span>
             )}
           </div>
 
-          {/* Warning notifications if fields missing */}
+          {/* Verification Advisory Warnings */}
           {dualDocResult?.warnings && dualDocResult.warnings.length > 0 && (
-            <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] space-y-1">
-              <div className="flex items-center gap-1 font-semibold">
-                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs space-y-1">
+              <div className="flex items-center gap-1.5 font-semibold text-amber-300">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>Verification Advisory:</span>
               </div>
               {dualDocResult.warnings.map((w, idx) => (
-                <p key={idx} className="text-[10px] text-amber-200/90 pl-4 list-disc">• {w}</p>
+                <p key={idx} className="text-xs text-amber-400/90 pl-4">• {w}</p>
               ))}
             </div>
           )}
 
-          {/* Forensic Integrity & Tamper Protection Badge */}
+          {/* Forensic Integrity & Verification Status */}
           {dualDocResult?.integrity_report && (
             <div
-              className={`p-2.5 rounded-lg border text-xs space-y-1.5 transition-all ${
+              className={`p-3 rounded-lg border text-xs space-y-2 transition-all ${
                 dualDocResult.integrity_report.quarantine_active
-                  ? 'bg-red-950/40 border-red-500/50 text-red-200'
-                  : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+                  ? 'bg-red-500/10 border-red-500/25 text-red-300'
+                  : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
               }`}
             >
               <div className="flex items-center justify-between">
@@ -431,59 +409,46 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                   )}
                   <span>
                     {dualDocResult.integrity_report.quarantine_active
-                      ? 'SECURITY ALERT: Tamper Suspected'
-                      : 'STATUTORY INTEGRITY: Verified'}
+                      ? 'Integrity Flag: Additional Verification Needed'
+                      : 'Statutory Integrity Verified'}
                   </span>
                 </div>
                 <span
-                  className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase ${
+                  className={`text-xs font-medium px-2 py-0.5 rounded ${
                     dualDocResult.integrity_report.quarantine_active
-                      ? 'bg-red-500/20 text-red-300 border border-red-500/40'
+                      ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                       : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   }`}
                 >
-                  {dualDocResult.integrity_report.quarantine_active ? 'QUARANTINE ACTIVE' : 'PAdES / CLEAN'}
+                  {dualDocResult.integrity_report.quarantine_active ? 'Manual Review' : 'Verified PAdES'}
                 </span>
               </div>
 
-              {dualDocResult.integrity_report.quarantine_active && (
-                <div className="space-y-1.5 text-[11px] pt-1 border-t border-red-800/40">
-                  <p className="text-red-300/90 font-medium leading-relaxed">
-                    Browser execution is strictly locked to prevent statutory portal fraud under Section 199/200 IPC.
-                  </p>
-                  {onVerifyDigiLocker && (
-                    <button
-                      type="button"
-                      onClick={onVerifyDigiLocker}
-                      className="w-full py-1.5 px-3 rounded bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-semibold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                    >
-                      <ExternalLink className="w-3.5 h-3.5" />
-                      <span>Resolve via DigiLocker (NSSO / MeriPehchaan)</span>
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {dualDocResult.integrity_report.forensic_findings && dualDocResult.integrity_report.forensic_findings.length > 0 && (
-                <div className="text-[10px] space-y-0.5 pt-1 border-t border-slate-700/40 opacity-85">
-                  {dualDocResult.integrity_report.forensic_findings.map((f, i) => (
-                    <p key={i} className="truncate">• {f}</p>
-                  ))}
+              {dualDocResult.integrity_report.quarantine_active && onVerifyDigiLocker && (
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={onVerifyDigiLocker}
+                    className="w-full py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    <span>Verify via DigiLocker / MeriPehchaan</span>
+                  </button>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Live Citizen Profile Card & Direct Editor */}
-        <div className="border border-slate-800 rounded-xl overflow-hidden bg-slate-800/40">
-          <div className="px-3.5 py-2.5 flex items-center justify-between bg-slate-800/70 border-b border-slate-800">
+        {/* Live Citizen Profile Card */}
+        <div className="border border-[#263244] rounded-xl overflow-hidden bg-[#141C27] shadow-xs">
+          <div className="px-4 py-2.5 flex items-center justify-between bg-[#101720] border-b border-[#263244]">
             <div className="flex items-center gap-2">
-              <User className="w-4 h-4 text-indigo-400" />
-              <span className="text-xs font-bold text-white truncate max-w-[150px]">
+              <User className="w-4 h-4 text-blue-400" />
+              <span className="text-xs font-bold text-[#F1F5F9] truncate max-w-[150px]">
                 {profile.full_name || 'Active Citizen'}
               </span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 font-mono">
+              <span className="text-xs px-2 py-0.2 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 font-medium">
                 {profile.category || 'GENERAL'}
               </span>
             </div>
@@ -492,16 +457,16 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
               <button
                 type="button"
                 onClick={onOpenEditProfile}
-                className="px-2 py-1 rounded bg-blue-600/30 hover:bg-blue-600/60 active:bg-blue-600/80 border border-blue-500/40 text-blue-300 hover:text-white text-[11px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                title="Edit Citizen Profile fields directly"
+                className="px-2.5 py-1 rounded-md bg-[#192333] hover:bg-[#202c40] border border-[#263244] text-slate-200 text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+                title="Edit Citizen Profile details"
               >
-                <Edit2 className="w-3 h-3" />
+                <Edit2 className="w-3 h-3 text-slate-400" />
                 <span>Edit Profile</span>
               </button>
               <button
                 type="button"
                 onClick={() => setShowProfileDetails(!showProfileDetails)}
-                className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700/50 active:scale-95 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+                className="p-1 rounded text-slate-400 hover:text-slate-200 transition-colors cursor-pointer"
               >
                 {showProfileDetails ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               </button>
@@ -509,28 +474,28 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
           </div>
 
           {showProfileDetails && (
-            <div className="p-3 text-[11px] space-y-1.5 bg-slate-900/50">
+            <div className="p-3.5 text-xs space-y-2 bg-[#141C27]">
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">National ID / Aadhaar:</span>
-                <span className="font-mono text-slate-200 font-semibold">{profile.national_id || 'Not set'}</span>
+                <span className="font-mono text-[#F1F5F9] font-semibold">{profile.national_id || 'Not set'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Registered Email:</span>
-                <span className="text-slate-200 truncate max-w-[170px]">{profile.email || 'Not set'}</span>
+                <span className="text-[#F1F5F9] truncate max-w-[180px]">{profile.email || 'Not set'}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Domicile State:</span>
-                <span className="text-slate-200 font-medium">{profile.address_state || 'Not set'}</span>
+                <span className="text-[#F1F5F9] font-medium">{profile.address_state || 'Not set'}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-400">Annual Income:</span>
+                <span className="text-slate-400">Annual Family Income:</span>
                 <span className="text-emerald-400 font-bold font-mono">
                   ₹{(profile.income_annual || 0).toLocaleString()}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-slate-400">Academic Score:</span>
-                <span className="text-cyan-300 font-medium">
+                <span className="text-blue-400 font-medium">
                   {profile.attributes.gpa ? `GPA ${profile.attributes.gpa}` : ''} 
                   {profile.attributes.percentage ? ` (${profile.attributes.percentage}%)` : ''}
                   {!profile.attributes.gpa && !profile.attributes.percentage ? 'Not set' : ''}
@@ -539,70 +504,43 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
               {profile.attributes.institution && (
                 <div className="flex justify-between items-center">
                   <span className="text-slate-400">Institution:</span>
-                  <span className="text-slate-300 truncate max-w-[170px]">{profile.attributes.institution}</span>
-                </div>
-              )}
-
-              {/* Multimodal Grounding Proof Badges */}
-              {dualDocResult?.bounding_boxes && (
-                <div className="pt-2 border-t border-slate-700/40 text-[10px] space-y-1">
-                  <div className="flex items-center gap-1 font-semibold text-cyan-400">
-                    <Sparkles className="w-3 h-3 text-cyan-400 shrink-0" />
-                    <span>Gemini Multimodal Grounding Proof:</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {dualDocResult.bounding_boxes.transcript?.gpa && (
-                      <span className="px-1.5 py-0.5 rounded bg-cyan-950/60 border border-cyan-500/40 text-cyan-300 font-mono text-[9px]">
-                        GPA Grounded @ [{dualDocResult.bounding_boxes.transcript.gpa.join(', ')}]
-                      </span>
-                    )}
-                    {dualDocResult.bounding_boxes.income_certificate?.annual_income && (
-                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 font-mono text-[9px]">
-                        Income Grounded @ [{dualDocResult.bounding_boxes.income_certificate.annual_income.join(', ')}]
-                      </span>
-                    )}
-                    {dualDocResult.bounding_boxes.transcript?.student_name && (
-                      <span className="px-1.5 py-0.5 rounded bg-indigo-950/60 border border-indigo-500/40 text-indigo-300 font-mono text-[9px]">
-                        Name Grounded @ [{dualDocResult.bounding_boxes.transcript.student_name.join(', ')}]
-                      </span>
-                    )}
-                  </div>
+                  <span className="text-slate-300 truncate max-w-[180px]">{profile.attributes.institution}</span>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {/* Statutory Benchmark PDFs Toggle */}
-        <div className="border border-slate-800/80 rounded-lg overflow-hidden bg-slate-950/40">
+        {/* Benchmark Personas Accordion */}
+        <div className="border border-[#263244] rounded-lg overflow-hidden bg-[#101720]/60">
           <button
             type="button"
             onClick={() => setShowTestPersonas(!showTestPersonas)}
-            className="w-full px-3 py-2 flex items-center justify-between text-[11px] font-medium text-slate-400 hover:text-slate-200 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+            className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-medium text-slate-300 hover:text-[#F1F5F9] transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Statutory Benchmark PDFs (Dispatches to Live Gemini 3.5 Flash OCR)</span>
+              <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+              <span>Sample Personas & Demonstration Scenarios</span>
             </div>
-            {showTestPersonas ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {showTestPersonas ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
           </button>
 
           {showTestPersonas && (
-            <div className="p-2.5 border-t border-slate-800/80 space-y-2 bg-slate-900/30">
-              <p className="text-[10px] text-slate-400 leading-relaxed">
-                <strong className="text-emerald-400">Zero Dummy Data Compliance:</strong> Selecting a benchmark document immediately streams authentic PDF bytes to the backend for real-time Gemini 3.5 Flash multimodal OCR, dynamically extracting verified criteria with zero hardcoded form values.
+            <div className="p-3 border-t border-[#263244] space-y-2 bg-[#141C27]">
+              <p className="text-xs text-[#94A3B8] leading-relaxed">
+                Selecting a persona automatically streams sample statutory documents through multimodal OCR:
               </p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {SAMPLE_PRESETS.map((preset) => (
                   <button
                     key={preset.id}
                     onClick={() => handlePresetSelect(preset)}
                     disabled={isExecuting}
-                    className="p-2 rounded-lg border border-slate-800 hover:border-indigo-500/60 bg-slate-900/60 hover:bg-slate-800 active:bg-slate-700/80 text-left transition-all cursor-pointer text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+                    className="p-2.5 rounded-lg border border-[#263244] hover:border-blue-500/40 bg-[#101720] hover:bg-[#192333] text-left transition-colors cursor-pointer text-xs disabled:opacity-50"
                   >
-                    <div className="font-semibold text-white truncate">📄 {preset.name} (PDF)</div>
-                    <div className="text-[10px] text-indigo-300 mt-0.5">{preset.title}</div>
-                    <div className="text-[10px] text-slate-400">{preset.category}</div>
+                    <div className="font-semibold text-[#F1F5F9]">{preset.name}</div>
+                    <div className="text-xs text-blue-400 mt-0.5">{preset.title}</div>
+                    <div className="text-xs text-slate-400">{preset.category}</div>
                   </button>
                 ))}
               </div>
@@ -610,22 +548,21 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
           )}
         </div>
 
-        {/* Live Statutory Scheme Matcher Results */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between gap-1 flex-wrap">
+        {/* Statutory Scheme Matcher Section */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
             <div className="flex items-center gap-1.5">
-              <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
-                <Award className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-xs font-semibold text-[#F1F5F9] flex items-center gap-1.5">
+                <Award className="w-4 h-4 text-blue-400" />
                 <span>Available Schemes ({schemes.length})</span>
               </span>
               {appliedCount > 0 && onOpenAppliedModal && (
                 <button
                   type="button"
                   onClick={onOpenAppliedModal}
-                  className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 active:bg-emerald-500/40 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                  title="View your submitted scholarship applications"
+                  className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/25 flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  <CheckCircle2 className="w-3 h-3" />
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                   <span>{appliedCount} Applied</span>
                 </button>
               )}
@@ -636,20 +573,20 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                   type="button"
                   onClick={onSyncLiveData}
                   disabled={isExecuting || isSyncing}
-                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 text-slate-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                  title="Scrape and sync live scholarships directly from National Scholarship Portal (scholarships.gov.in)"
+                  className="px-2.5 py-1 rounded-md bg-[#141C27] hover:bg-[#192333] border border-[#263244] text-slate-300 hover:text-[#F1F5F9] text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                  title="Sync live scheme catalog from National Scholarship Portal"
                 >
                   <RefreshCw className={`w-3 h-3 text-blue-400 ${isSyncing ? 'animate-spin' : ''}`} />
-                  <span>{isSyncing ? 'Scraping Web...' : 'Fetch Live NSP'}</span>
+                  <span>{isSyncing ? 'Syncing...' : 'Fetch Live NSP'}</span>
                 </button>
               )}
               <button
                 onClick={onOpenAddModal}
                 disabled={isExecuting}
-                className="px-2 py-1 rounded bg-cyan-600/30 hover:bg-cyan-600/50 active:bg-cyan-600/70 border border-cyan-500/40 text-cyan-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition-all cursor-pointer active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400"
-                title="Add a custom government, state, or college scholarship portal"
+                className="px-2.5 py-1 rounded-md bg-[#141C27] hover:bg-[#192333] border border-[#263244] text-slate-300 hover:text-[#F1F5F9] text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                title="Add a custom scholarship or college portal target"
               >
-                <PlusCircle className="w-3 h-3" />
+                <PlusCircle className="w-3 h-3 text-blue-400" />
                 <span>+ Custom Portal</span>
               </button>
             </div>
@@ -661,65 +598,66 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
               type="button"
               onClick={onApplyAllEligible}
               disabled={isExecuting}
-              className="w-full py-2 px-3 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white font-bold text-xs flex items-center justify-between shadow-lg shadow-emerald-500/10 transition-all cursor-pointer active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-              title="Autonomous Subagents will apply to each eligible scholarship across their respective portals"
+              className="w-full py-2.5 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs flex items-center justify-between shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+              title="Apply across all eligible scholarship portals automatically"
             >
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-emerald-200" />
+                <Layers className="w-4 h-4" />
                 <span>Apply to All Eligible Schemes ({schemes.filter((m) => m.is_eligible).length})</span>
               </div>
-              <span className="text-[11px] font-mono font-bold bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-400/30">
+              <span className="text-xs font-mono font-bold bg-emerald-700/80 px-2 py-0.5 rounded">
                 ₹{schemes.filter((m) => m.is_eligible).reduce((acc, curr) => acc + curr.scheme.grant_amount_annual, 0).toLocaleString()}/yr Total
               </span>
             </button>
           )}
 
-          <div className="space-y-2">
+          {/* Scheme Cards */}
+          <div className="space-y-2.5">
             {schemes.map((match) => {
               const { scheme, is_eligible, eligibility_score, missing_criteria } = match;
               return (
                 <div
                   key={scheme.id}
-                  className={`p-3 rounded-lg border transition-all space-y-2 ${
+                  className={`p-3.5 rounded-xl border transition-all space-y-2.5 ${
                     scheme.is_custom
-                      ? 'border-cyan-500/40 bg-cyan-950/20 shadow-sm shadow-cyan-500/5'
+                      ? 'border-blue-500/30 bg-[#101720] shadow-xs'
                       : is_eligible
-                      ? 'border-slate-800 bg-slate-800/40 hover:border-slate-700'
-                      : 'border-slate-800/60 bg-slate-900/30 opacity-75'
+                      ? 'border-[#263244] bg-[#141C27] hover:border-slate-600 shadow-xs'
+                      : 'border-[#263244]/80 bg-[#101720]/70 opacity-75'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <h4 className="font-semibold text-xs text-white leading-tight">
+                        <h4 className="font-semibold text-sm text-[#F1F5F9] leading-tight">
                           {scheme.name}
                         </h4>
                         {scheme.is_custom && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                          <span className="px-1.5 py-0.2 rounded text-[11px] font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20">
                             Custom Target
                           </span>
                         )}
                         {scheme.login_mode === 'credentials' && (
-                          <span className="px-1.5 py-0.2 rounded text-[9px] font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-0.5">
+                          <span className="px-1.5 py-0.2 rounded text-[11px] font-medium bg-[#192333] text-slate-300 border border-[#263244] flex items-center gap-0.5">
                             <KeyRound className="w-2.5 h-2.5" />
                             <span>Auth Required</span>
                           </span>
                         )}
                       </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 flex items-center gap-1">
-                        <Globe className="w-2.5 h-2.5 text-slate-500 shrink-0" />
+                      <p className="text-xs text-[#94A3B8] mt-1 line-clamp-1 flex items-center gap-1">
+                        <Globe className="w-3 h-3 text-slate-500 shrink-0" />
                         <span className="truncate">{scheme.portal_url}</span>
                       </p>
                     </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="text-xs font-bold text-emerald-400 whitespace-nowrap">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-bold text-emerald-400 whitespace-nowrap">
                         ₹{scheme.grant_amount_annual.toLocaleString()}/yr
                       </span>
                       {scheme.is_custom && (
                         <button
                           onClick={() => onDeleteCustomScheme(scheme.id)}
-                          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 active:scale-95"
-                          title="Delete this custom scheme"
+                          className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-[#192333] transition-colors cursor-pointer"
+                          title="Delete custom scheme"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -728,17 +666,17 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                   </div>
 
                   {/* Match Criteria Badges */}
-                  <div className="flex flex-wrap gap-1 text-[10px]">
-                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  <div className="flex flex-wrap gap-1.5 text-xs">
+                    <span className="px-2 py-0.5 rounded-md bg-[#192333] text-slate-300 font-medium border border-[#263244]">
                       Income &lt; ₹{(scheme.max_family_income / 100000).toFixed(1)}L
                     </span>
-                    <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20">
+                    <span className="px-2 py-0.5 rounded-md bg-[#192333] text-slate-300 font-medium border border-[#263244]">
                       Min Marks {scheme.min_gpa_or_percentage}%
                     </span>
-                    <span className={`px-1.5 py-0.5 rounded border font-mono ${
+                    <span className={`px-2 py-0.5 rounded-md font-semibold border ${
                       is_eligible 
-                        ? 'bg-purple-500/10 text-purple-300 border-purple-500/20' 
-                        : 'bg-rose-500/10 text-rose-300 border-rose-500/20'
+                        ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' 
+                        : 'bg-red-500/15 text-red-400 border-red-500/25'
                     }`}>
                       {(eligibility_score * 100).toFixed(0)}% Match
                     </span>
@@ -746,7 +684,7 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
 
                   {/* Missing criteria notice if ineligible */}
                   {!is_eligible && missing_criteria && missing_criteria.length > 0 && (
-                    <div className="text-[10px] text-rose-400/90 bg-rose-500/5 p-1.5 rounded border border-rose-500/10">
+                    <div className="text-xs text-red-400 bg-red-500/10 p-2 rounded-md border border-red-500/20">
                       {missing_criteria[0]}
                     </div>
                   )}
@@ -755,11 +693,11 @@ export const IntakeColumn: React.FC<IntakeColumnProps> = React.memo(({
                   <button
                     onClick={() => onSelectSchemeAndExecute(match)}
                     disabled={isExecuting || !is_eligible}
-                    className="w-full mt-1 py-1.5 px-3 rounded-md bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 active:from-blue-700 active:to-indigo-700 active:scale-[0.98] text-white text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md shadow-blue-500/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                    className="w-full mt-1 py-2 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-medium flex items-center justify-center gap-1.5 shadow-xs transition-colors disabled:bg-[#192333] disabled:text-slate-500 disabled:border disabled:border-[#263244] disabled:cursor-not-allowed cursor-pointer"
                   >
                     <span>
                       {isExecuting
-                        ? 'Agent Running...'
+                        ? 'Agent Session in Progress...'
                         : scheme.login_mode === 'credentials'
                         ? 'Login & Apply with CivicAgent'
                         : 'Auto-Apply with CivicAgent'}

@@ -30,11 +30,11 @@ export interface InspectorDrawerProps {
 
 const STAGES = [
   { id: 'PREFLIGHT', label: 'Pre-flight' },
-  { id: 'SPINNING_BROWSER', label: 'Stealth Browser' },
-  { id: 'SOLVING_OBSTACLES', label: 'Obstacle Solver' },
-  { id: 'POPULATING_FORM', label: 'Form Populate' },
-  { id: 'SELF_REFLECTION', label: 'Self-Reflection' },
-  { id: 'AWAITING_CITIZEN_REVIEW', label: 'HITL Sign-off' },
+  { id: 'SPINNING_BROWSER', label: 'Browser Init' },
+  { id: 'SOLVING_OBSTACLES', label: 'Obstacle Check' },
+  { id: 'POPULATING_FORM', label: 'Form Fill' },
+  { id: 'SELF_REFLECTION', label: 'Audit Review' },
+  { id: 'AWAITING_CITIZEN_REVIEW', label: 'Citizen Sign' },
   { id: 'SUBMITTED', label: 'Confirmed' },
 ];
 
@@ -77,20 +77,20 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
   const getActionIcon = (action: string) => {
     switch (action) {
       case 'OBSTACLE_RESOLVED':
-        return <ShieldAlert className="w-3.5 h-3.5 text-amber-400" />;
+        return <ShieldAlert className="size-3.5 text-amber-500" />;
       case 'FORM_POPULATED':
-        return <GitCommit className="w-3.5 h-3.5 text-blue-400" />;
+        return <GitCommit className="size-3.5 text-blue-500" />;
       case 'DOCUMENT_ATTACHED':
-        return <FileCheck2 className="w-3.5 h-3.5 text-cyan-400" />;
+        return <FileCheck2 className="size-3.5 text-emerald-500" />;
       case 'SELF_REFLECTION_VERIFIED':
-        return <Sparkles className="w-3.5 h-3.5 text-purple-400" />;
+        return <Sparkles className="size-3.5 text-sky-500" />;
       case 'AWAITING_CITIZEN_SIGNATURE':
-        return <AlertTriangle className="w-3.5 h-3.5 text-pink-400 animate-pulse" />;
+        return <AlertTriangle className="size-3.5 text-amber-500" />;
       case 'APPLICATION_SUBMITTED':
       case 'RECEIPT_EXTRACTED':
-        return <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />;
+        return <CheckCircle className="size-3.5 text-emerald-500" />;
       default:
-        return <Clock className="w-3.5 h-3.5 text-slate-400" />;
+        return <Clock className="size-3.5 text-[#a1a1aa]" />;
     }
   };
 
@@ -108,80 +108,80 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end font-sans">
       {/* Backdrop */}
       <div 
-        className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm transition-opacity"
+        className="fixed inset-0 bg-black/30 backdrop-blur-xs transition-opacity"
         onClick={onClose}
       />
 
-      {/* Slide-over Panel */}
+      {/* Slide-over Panel (Efferd / Shadcn Sheet Style) */}
       <aside 
-        className="relative z-10 w-full max-w-xl bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col h-full animate-in slide-in-from-right duration-200"
+        className="relative z-10 w-full max-w-xl bg-white border-l border-[#e4e4e7] shadow-xl flex flex-col h-full animate-in slide-in-from-right duration-200 text-[#09090b]"
         aria-label="AI Reasoning & Telemetry Inspector"
       >
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 bg-slate-900/95 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-[#e4e4e7] bg-white flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
-              <Cpu className="w-4 h-4" />
+            <div className="size-9 rounded-md bg-[#f4f4f5] text-[#18181b] flex items-center justify-center border border-[#e4e4e7]">
+              <Cpu className="size-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-bold text-sm text-white">AI Reasoning & Audit Inspector</h2>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                  Judge Mode
+                <h2 className="font-semibold text-sm text-[#09090b]">System Reasoning & Audit Inspector</h2>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#f4f4f5] text-[#18181b] border border-[#e4e4e7]">
+                  Technical View
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
-                Real-time Playwright state machine, tool calls & multimodal audits
+              <p className="text-xs text-[#71717a]">
+                Live execution trajectory, state machine, and provenance audits
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={handleCopyTelemetry}
               disabled={events.length === 0}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-300 hover:text-white transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
+              className="p-1.5 rounded-md border border-[#e4e4e7] bg-white hover:bg-[#f4f4f5] text-[#71717a] hover:text-[#09090b] transition-colors cursor-pointer disabled:opacity-40"
               title="Copy Raw Telemetry JSON"
             >
-              {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="size-4 text-emerald-600" /> : <Copy className="size-4" />}
             </button>
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-slate-400 hover:text-white transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              className="p-1 rounded-md text-[#71717a] hover:text-[#09090b] hover:bg-[#f4f4f5] transition-colors cursor-pointer"
               title="Close Inspector"
             >
-              <X className="w-4 h-4" />
+              <X className="size-4" />
             </button>
           </div>
         </div>
 
         {/* Live Metrics Bar */}
-        <div className="px-4 py-2.5 bg-slate-950/60 border-b border-slate-800 grid grid-cols-3 gap-2 text-xs font-mono">
+        <div className="px-5 py-3 bg-[#fafafa] border-b border-[#e4e4e7] grid grid-cols-3 gap-3 text-xs font-mono">
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">WebSocket</span>
-            <span className={`font-semibold flex items-center gap-1 ${wsConnected ? 'text-emerald-400' : 'text-amber-400'}`}>
-              <Activity className="w-3 h-3" />
-              {wsConnected ? 'LIVE FEED' : 'STANDBY'}
+            <span className="text-[10px] text-[#71717a] uppercase tracking-wider">WebSocket</span>
+            <span className={`font-medium flex items-center gap-1 mt-0.5 ${wsConnected ? 'text-emerald-700' : 'text-amber-600'}`}>
+              <Activity className="size-3" />
+              {wsConnected ? 'CONNECTED' : 'STANDBY'}
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Active Custody</span>
-            <span className="text-slate-200 font-semibold truncate">{activeActor.replace(/_/g, ' ')}</span>
+            <span className="text-[10px] text-[#71717a] uppercase tracking-wider">Active Custody</span>
+            <span className="text-[#09090b] font-medium truncate mt-0.5">{activeActor.replace(/_/g, ' ')}</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[10px] text-slate-500 uppercase tracking-wider">Total Events</span>
-            <span className="text-indigo-300 font-bold">{events.length}</span>
+            <span className="text-[10px] text-[#71717a] uppercase tracking-wider">Total Events</span>
+            <span className="text-[#09090b] font-semibold mt-0.5">{events.length}</span>
           </div>
         </div>
 
         {/* State Machine DAG / Progress Stepper */}
-        <div className="p-3 border-b border-slate-800/80 bg-slate-950/40">
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider block mb-1.5 font-mono">
+        <div className="p-3 border-b border-[#e4e4e7] bg-white">
+          <span className="text-[10px] text-[#71717a] uppercase tracking-wider block mb-2 font-mono">
             Execution State Machine
           </span>
           <div className="flex items-center justify-between gap-1 overflow-x-auto pb-1">
@@ -191,19 +191,19 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
               return (
                 <div key={s.id} className="flex items-center gap-1 min-w-fit">
                   <div
-                    className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    className={`h-6 px-2 rounded text-[11px] font-medium flex items-center transition-colors ${
                       isCurrent
-                        ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/30 font-semibold'
+                        ? 'bg-[#18181b] text-white'
                         : isCompleted
-                        ? 'bg-slate-800 text-emerald-400 font-mono'
-                        : 'bg-slate-900 text-slate-500'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : 'bg-white text-[#71717a] border border-[#e4e4e7]'
                     }`}
                   >
                     {isCompleted && '✓ '}
                     {s.label}
                   </div>
                   {idx < STAGES.length - 1 && (
-                    <ArrowRight className={`w-2.5 h-2.5 ${isCompleted ? 'text-emerald-500/60' : 'text-slate-700'}`} />
+                    <ArrowRight className={`size-3 ${isCompleted ? 'text-emerald-600' : 'text-[#d4d4d8]'}`} />
                   )}
                 </div>
               );
@@ -212,97 +212,67 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
         </div>
 
         {/* Filter Tabs */}
-        <div className="px-4 py-2 border-b border-slate-800 bg-slate-900/60 flex items-center gap-1.5 overflow-x-auto text-[11px]">
+        <div className="px-5 py-2.5 border-b border-[#e4e4e7] bg-[#fafafa] flex items-center gap-1.5 overflow-x-auto text-xs">
           {(['ALL', 'AGENT', 'OBSTACLE', 'REFLECTION', 'COMPLIANCE'] as const).map((f) => (
             <button
               key={f}
               type="button"
               onClick={() => setFilter(f)}
-              className={`px-2.5 py-1 rounded-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 active:scale-95 ${
+              className={`h-7 px-2.5 rounded-md transition-colors cursor-pointer text-xs font-medium ${
                 filter === f
-                  ? 'bg-blue-600 text-white font-semibold'
-                  : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700/80'
+                  ? 'bg-[#18181b] text-white shadow-xs'
+                  : 'bg-white text-[#71717a] hover:text-[#09090b] hover:bg-[#f4f4f5] border border-[#e4e4e7]'
               }`}
             >
-              {f === 'ALL' && 'All Telemetry'}
-              {f === 'AGENT' && 'Agent Loop'}
+              {f === 'ALL' && 'All Events'}
+              {f === 'AGENT' && 'Agent Actions'}
               {f === 'OBSTACLE' && 'Obstacles'}
-              {f === 'REFLECTION' && 'Self-Reflection'}
-              {f === 'COMPLIANCE' && '⚖️ Judge Audit & Proofs'}
+              {f === 'REFLECTION' && 'Audits'}
+              {f === 'COMPLIANCE' && 'Technical Proofs'}
             </button>
           ))}
         </div>
 
         {/* Event Timeline Feed */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2.5 font-sans">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-2.5 font-sans bg-white">
           {filter === 'COMPLIANCE' ? (
-            <div className="space-y-3.5 text-xs">
-              <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
-                <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
-                  <CheckCircle className="w-4 h-4" />
-                  <span>Strict Zero Dummy Data Compliance</span>
+            <div className="space-y-3 text-xs">
+              <div className="p-3.5 rounded-md bg-[#fafafa] border border-[#e4e4e7] space-y-2 shadow-xs">
+                <div className="flex items-center gap-2 text-emerald-700 font-medium text-xs">
+                  <CheckCircle className="size-4" />
+                  <span>Statutory Data & Registry Provenance</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
+                <p className="text-xs text-[#71717a] leading-relaxed">
                   All active statutory entitlement programs are loaded dynamically from verified open government data feeds and persistent SQLite WAL tables with continuous SHA-256 state digests.
                 </p>
-                <div className="pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[10px] font-mono">
-                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 block">OGD Gateway:</span>
-                    <span className="text-slate-200">api.data.gov.in (Live)</span>
+                <div className="pt-2 border-t border-[#e4e4e7] grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="bg-white p-2.5 rounded border border-[#e4e4e7]">
+                    <span className="text-[#71717a] block text-[10px]">OGD Gateway:</span>
+                    <span className="text-[#09090b]">api.data.gov.in</span>
                   </div>
-                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 block">Database Sync Mode:</span>
-                    <span className="text-emerald-400">SQLite WAL Active</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
-                <div className="flex items-center gap-2 text-indigo-400 font-semibold text-xs">
-                  <Sparkles className="w-4 h-4" />
-                  <span>Gemini ReAct & Structured Schema Engine</span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Autonomous form navigation uses Google Gemini Flash with strict Pydantic JSON schemas (<code className="text-indigo-300">responseSchema</code>) and working memory trajectory to eliminate hallucinations.
-                </p>
-                <div className="pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[10px] font-mono">
-                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 block">Planner Model:</span>
-                    <span className="text-slate-200">gemini-flash-lite-latest</span>
-                  </div>
-                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 block">Visual Grounding:</span>
-                    <span className="text-purple-300">[ymin, xmin, ymax, xmax]</span>
+                  <div className="bg-white p-2.5 rounded border border-[#e4e4e7]">
+                    <span className="text-[#71717a] block text-[10px]">Database Mode:</span>
+                    <span className="text-emerald-700 font-semibold">SQLite WAL</span>
                   </div>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-2">
-                <div className="flex items-center gap-2 text-cyan-400 font-semibold text-xs">
-                  <ShieldAlert className="w-4 h-4" />
-                  <span>Human-in-the-Loop & Cryptographic Proofs</span>
+              <div className="p-3.5 rounded-md bg-[#fafafa] border border-[#e4e4e7] space-y-2 shadow-xs">
+                <div className="flex items-center gap-2 text-[#09090b] font-medium text-xs">
+                  <Sparkles className="size-4 text-[#71717a]" />
+                  <span>Multimodal Reasoning Engine</span>
                 </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed">
-                  Execution halts at final statutory declarations for explicit citizen canvas sign-off. Post-submission receipts extract live government tracking numbers with SHA-256 screenshot hashes.
+                <p className="text-xs text-[#71717a] leading-relaxed">
+                  Form navigation combines DOM inspection with Gemini vision coordinate grounding and human-paced micro-cadence jitter to prevent portal rate limits.
                 </p>
-                <div className="pt-2 border-t border-slate-700/50 grid grid-cols-2 gap-2 text-[10px] font-mono">
-                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 block">Keystroke Jitter:</span>
-                    <span className="text-cyan-300">40-85ms Anti-Bot</span>
-                  </div>
-                  <div className="bg-slate-900/80 p-2 rounded border border-slate-800">
-                    <span className="text-slate-500 block">PII Redaction:</span>
-                    <span className="text-emerald-400">Aadhaar / Contact Masked</span>
-                  </div>
-                </div>
               </div>
             </div>
           ) : filteredEvents.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500">
-              <Layers className="w-8 h-8 mb-2 stroke-1 text-slate-600" />
-              <p className="text-xs font-medium text-slate-400">No Telemetry Recorded</p>
-              <p className="text-[11px] text-slate-500 max-w-[240px] mt-1">
-                Select an eligible scholarship scheme and initiate &quot;Auto-Apply&quot; to begin streaming real-time browser actions.
+            <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#a1a1aa]">
+              <Layers className="size-8 mb-2 stroke-1 text-[#d4d4d8]" />
+              <p className="text-xs font-medium text-[#09090b]">No Telemetry Recorded</p>
+              <p className="text-xs text-[#71717a] max-w-[240px] mt-0.5">
+                Select an eligible scholarship and launch an application session to stream real-time events.
               </p>
             </div>
           ) : (
@@ -311,30 +281,30 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
               return (
                 <div
                   key={index}
-                  className="p-3 rounded-lg border border-slate-800 bg-slate-800/40 hover:bg-slate-800/70 transition-colors space-y-1 text-xs"
+                  className="p-3 rounded-md border border-[#e4e4e7] bg-[#fafafa] hover:border-[#a1a1aa] transition-colors space-y-1.5 text-xs shadow-xs"
                 >
-                  <div className="flex items-center justify-between text-[10px]">
+                  <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
                       {getActionIcon(evt.action)}
-                      <span className="font-semibold text-slate-200 uppercase tracking-wider font-mono">
+                      <span className="font-medium text-[#09090b] uppercase tracking-wide font-mono text-[11px]">
                         {evt.action.replace(/_/g, ' ')}
                       </span>
                     </div>
-                    <span className="font-mono text-slate-500">{timeStr}</span>
+                    <span className="font-mono text-[#71717a] text-[11px]">{timeStr}</span>
                   </div>
 
-                  <p className="text-slate-300 text-[11px] leading-relaxed pl-5 font-mono">
+                  <p className="text-[#09090b] text-xs leading-relaxed pl-5 font-mono">
                     {evt.details}
                   </p>
 
-                  <div className="pl-5 pt-1 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                    <div className="flex items-center gap-3">
+                  <div className="pl-5 pt-1.5 flex items-center justify-between text-xs text-[#71717a] font-mono">
+                    <div className="flex items-center gap-2">
                       {evt.step !== undefined && <span>Step {evt.step}</span>}
                       {evt.fields_filled !== undefined && evt.fields_filled > 0 && (
                         <span>• {evt.fields_filled} Inputs Filled</span>
                       )}
                     </div>
-                    <span className="px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700/60 text-[9px] text-slate-400">
+                    <span className="px-1.5 py-0.5 rounded bg-white border border-[#e4e4e7] text-[10px] text-[#71717a]">
                       {evt.actor}
                     </span>
                   </div>
@@ -345,17 +315,17 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between text-[11px] text-slate-400">
-          <div className="flex items-center gap-1.5 font-mono">
-            <Terminal className="w-3.5 h-3.5 text-blue-400" />
+        <div className="px-5 py-3 border-t border-[#e4e4e7] bg-white flex items-center justify-between text-xs text-[#71717a]">
+          <div className="flex items-center gap-2 font-mono">
+            <Terminal className="size-3.5 text-[#71717a]" />
             <span>Playwright CDP • Session Verified</span>
           </div>
           <button
             type="button"
             onClick={handleCopyTelemetry}
-            className="text-blue-400 hover:text-blue-300 active:text-blue-500 font-medium transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-400 rounded-sm"
+            className="text-[#18181b] hover:text-black font-medium transition-colors cursor-pointer"
           >
-            Export Audit Payload
+            Export JSON
           </button>
         </div>
       </aside>

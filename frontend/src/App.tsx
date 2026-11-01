@@ -1,15 +1,16 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { FileText, Monitor, Terminal } from 'lucide-react';
-import { Navbar } from './components/Navbar';
-import { IntakeColumn } from './components/intake/IntakeColumn';
-import { ViewportColumn } from './components/viewport/ViewportColumn';
-import { TraceColumn } from './components/telemetry/TraceColumn';
+import { Menu, X, Activity } from 'lucide-react';
+import { Sidebar, type DashboardView } from './components/Sidebar';
+import { OverviewView } from './components/views/OverviewView';
+import { ScholarshipsView } from './components/views/ScholarshipsView';
+import { DocumentsView } from './components/views/DocumentsView';
+import { ApplicationsView } from './components/views/ApplicationsView';
+import { ProfileView } from './components/views/ProfileView';
+import { ExecutionWorkspace } from './components/views/ExecutionWorkspace';
 import { InspectorDrawer } from './components/telemetry/InspectorDrawer';
 import { HitlModal } from './components/hitl/HitlModal';
 import { ReceiptModal } from './components/receipt/ReceiptModal';
 import { AddSchemeModal } from './components/intake/AddSchemeModal';
-import { EditProfileModal } from './components/intake/EditProfileModal';
-import { AppliedScholarshipsModal } from './components/applications/AppliedScholarshipsModal';
 import { LoginPage } from './components/auth/LoginPage';
 import { JudgeWalkthroughModal } from './components/walkthrough/JudgeWalkthroughModal';
 import type { 
@@ -45,6 +46,10 @@ import {
 } from './lib/cryptoVault';
 
 export const App: React.FC = () => {
+  // Navigation view state
+  const [activeView, setActiveView] = useState<DashboardView>('overview');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState<boolean>(false);
+
   // Current authenticated citizen user
   const [currentUser, setCurrentUser] = useState<CitizenUser | null>(() => {
     const stored = localStorage.getItem('civic_logged_in_user');
@@ -59,7 +64,6 @@ export const App: React.FC = () => {
   });
 
   const [lang, setLang] = useState<'en' | 'hi'>('en');
-
   const userId = currentUser ? currentUser.id : 'user_anonymous';
 
   // Load initial profile from stored user data, or blank initial profile
@@ -92,7 +96,6 @@ export const App: React.FC = () => {
         attributes: {},
       };
     }
-    // Zero Dummy Data Compliance: unauthenticated/empty baseline
     return {
       full_name: '',
       date_of_birth: '2003-01-01',
@@ -124,14 +127,9 @@ export const App: React.FC = () => {
   const [receiptOpen, setReceiptOpen] = useState<boolean>(false);
   const [activeReceipt, setActiveReceipt] = useState<TrackingReceipt | null>(null);
   const [isAddModalOpen, setIsAddModalOpen] = useState<boolean>(false);
-  const [isEditProfileOpen, setIsEditProfileOpen] = useState<boolean>(false);
-  const [isAppliedModalOpen, setIsAppliedModalOpen] = useState<boolean>(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [walkthroughOpen, setWalkthroughOpen] = useState<boolean>(false);
-
-  // Responsive mobile/tablet tab selector (360px - 1024px)
-  const [mobileTab, setMobileTab] = useState<'intake' | 'viewport' | 'trace'>('intake');
 
   // Fine-grained subscriptions to execution store
   const executionStatus = useExecutionStatus();
@@ -141,6 +139,10 @@ export const App: React.FC = () => {
   useEffect(() => {
     executionStore.setCallbacks({
       onHitl: () => {
+        // Automatically surface workspace or modal
+        if (activeView !== 'workspace') {
+          setActiveView('workspace');
+        }
         setHitlOpen(true);
       },
       onSubmitted: (receipt, caseId) => {
@@ -168,7 +170,7 @@ export const App: React.FC = () => {
         saveAppliedScholarship(userId, appRecord);
       },
     });
-  }, [selectedScheme, userId]);
+  }, [selectedScheme, userId, activeView]);
 
   // Initialize schemes, vault, and applied applications based on active user
   useEffect(() => {
@@ -247,7 +249,7 @@ export const App: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
-  // Memoized handlers to prevent child component re-render cascades
+  // Sync Live Data from Data.gov.in
   const handleSyncLiveData = useCallback(async () => {
     setIsSyncing(true);
     try {
@@ -267,6 +269,7 @@ export const App: React.FC = () => {
     }
   }, [profile, userId]);
 
+  // Document extraction and cryptographic vault storage
   const handleParseDocuments = useCallback(async (
     transcript: string, 
     income: string, 
@@ -299,7 +302,6 @@ export const App: React.FC = () => {
     setProfile(updated);
     saveCitizenProfile(userId, updated);
 
-    // Seal documents and extracted credentials into user's Zero-Knowledge Vault
     try {
       await saveVault(userId, {
         userId,
@@ -464,9 +466,7 @@ export const App: React.FC = () => {
 
     setSelectedScheme(match.scheme);
     setActiveReceipt(null);
-
-    // On mobile / tablet viewports, smoothly navigate user to Live Viewport
-    setMobileTab('viewport');
+    setActiveView('workspace');
 
     await executionStore.startExecution(match.scheme, profile, uploadedDocuments);
   }, [dualDocResult, executionStatus.isExecuting, profile, uploadedDocuments]);
@@ -484,7 +484,10 @@ export const App: React.FC = () => {
       return;
     }
 
-    setMobileTab('viewport');
+    const targetMatch = eligibleMatches[0];
+    setSelectedScheme(targetMatch.scheme);
+    setActiveReceipt(null);
+    setActiveView('workspace');
 
     executionStore.addLocalEvent(
       'BATCH_EXECUTION_INITIATED',
@@ -493,13 +496,8 @@ export const App: React.FC = () => {
       'STUDENT_INTAKE'
     );
 
-    // Run first eligible scheme immediately in live viewport session
-    const targetMatch = eligibleMatches[0];
-    setSelectedScheme(targetMatch.scheme);
-    setActiveReceipt(null);
     await executionStore.startExecution(targetMatch.scheme, profile, uploadedDocuments);
 
-    // Also dispatch batch execution plan to backend
     try {
       await executeBatchServices({
         profile,
@@ -521,7 +519,7 @@ export const App: React.FC = () => {
     setActiveReceipt(null);
     setHitlOpen(false);
     setReceiptOpen(false);
-    setMobileTab('intake');
+    setActiveView('overview');
   }, []);
 
   const handleTogglePause = useCallback(() => {
@@ -547,7 +545,6 @@ export const App: React.FC = () => {
     }
   }, [activeReceipt, executionStatus.receipt]);
 
-  // Derived effective receipt for the ReceiptModal
   const currentReceipt = useMemo(
     () => executionStatus.receipt || activeReceipt,
     [executionStatus.receipt, activeReceipt]
@@ -610,137 +607,261 @@ export const App: React.FC = () => {
     );
   }
 
+  const getViewTitle = () => {
+    switch (activeView) {
+      case 'overview':
+        return 'Overview';
+      case 'scholarships':
+        return 'Scholarships Directory';
+      case 'documents':
+        return 'Document Locker';
+      case 'applications':
+        return 'Applications Registry';
+      case 'profile':
+        return 'Citizen Profile';
+      case 'workspace':
+        return 'Application Execution Workspace';
+      default:
+        return 'Dashboard';
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#0b0f17] text-slate-100 flex flex-col font-sans selection:bg-blue-600/30 overflow-x-hidden">
-      {/* Top Navigation Bar */}
-      <Navbar
-        wsConnected={executionStatus.wsConnected}
-        activeActor={executionStatus.activeActor}
-        onReset={handleReset}
-        currentUser={currentUser}
-        onLogout={handleLogout}
-        onEditProfile={() => setIsEditProfileOpen(true)}
-        appliedCount={appliedList.length}
-        onOpenApplied={() => setIsAppliedModalOpen(true)}
-        isInspectorOpen={isInspectorOpen}
-        onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
-        eventCount={telemetryEvents.length}
-        onSyncLiveData={handleSyncLiveData}
-        isSyncing={isSyncing}
-        lang={lang}
-        onToggleLang={() => setLang((prev) => (prev === 'en' ? 'hi' : 'en'))}
-        onOpenWalkthrough={() => setWalkthroughOpen(true)}
-      />
+    <div className="min-h-screen bg-white text-[#09090b] flex font-sans selection:bg-[#18181b] selection:text-white">
+      {/* Desktop Left Persistent Sidebar */}
+      <div className="hidden lg:flex shrink-0 sticky top-0 h-screen">
+        <Sidebar
+          activeView={activeView}
+          onNavigate={(view) => setActiveView(view)}
+          currentUser={currentUser}
+          onLogout={handleLogout}
+          appliedCount={appliedList.length}
+          availableSchemesCount={schemes.filter(s => s.is_eligible).length}
+          isExecuting={executionStatus.isExecuting}
+          isVaultActive={isVaultActive}
+          wsConnected={executionStatus.wsConnected}
+          activeActor={executionStatus.activeActor}
+          isInspectorOpen={isInspectorOpen}
+          onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
+          eventCount={telemetryEvents.length}
+          onSyncLiveData={handleSyncLiveData}
+          isSyncing={isSyncing}
+          onOpenWalkthrough={() => setWalkthroughOpen(true)}
+          lang={lang}
+          onToggleLang={() => setLang((prev) => (prev === 'en' ? 'hi' : 'en'))}
+        />
+      </div>
 
-      {/* Main Cockpit Layout */}
-      <main className="flex-1 p-2 sm:p-4 max-w-[1920px] mx-auto w-full flex flex-col min-h-[calc(100vh-65px)]">
-        {/* Mobile & Tablet Responsive View Switcher (360px - 1279px) */}
-        <div className="xl:hidden flex items-center p-1 bg-slate-900/90 border border-slate-800 rounded-xl mb-3 shadow-md gap-1">
-          <button
-            type="button"
-            onClick={() => setMobileTab('intake')}
-            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-              mobileTab === 'intake'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>1. Intake</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab('viewport')}
-            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-              mobileTab === 'viewport'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Monitor className="w-4 h-4" />
-            <span>2. Viewport</span>
-            {executionStatus.isExecuting && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping inline-block" />
-            )}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMobileTab('trace')}
-            className={`flex-1 py-2 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer min-h-[44px] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 ${
-              mobileTab === 'trace'
-                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/20'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Terminal className="w-4 h-4" />
-            <span>3. Trace</span>
-            {telemetryEvents.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-800 border border-slate-700 text-blue-300 font-mono">
-                {telemetryEvents.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* 3-Column Responsive Cockpit Grid */}
-        <div className="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-4 items-stretch min-h-[580px]">
-          {/* Column 1: Citizen Intake & Statutory Scheme Matcher */}
-          <section className={`xl:col-span-4 h-[calc(100vh-140px)] xl:h-[calc(100vh-95px)] min-h-[540px] flex flex-col ${
-            mobileTab === 'intake' ? 'flex' : 'hidden xl:flex'
-          }`}>
-            <IntakeColumn
-              profile={profile}
-              dualDocResult={dualDocResult}
-              onParseDocuments={handleParseDocuments}
-              schemes={schemes}
-              onSelectSchemeAndExecute={handleSelectSchemeAndExecute}
-              isExecuting={executionStatus.isExecuting}
-              onOpenAddModal={() => setIsAddModalOpen(true)}
-              onDeleteCustomScheme={handleDeleteCustomScheme}
-              onOpenEditProfile={() => setIsEditProfileOpen(true)}
+      {/* Mobile Sidebar Overlay Drawer */}
+      {isMobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-50 flex">
+          <div 
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs" 
+            onClick={() => setIsMobileSidebarOpen(false)} 
+          />
+          <div className="relative z-10">
+            <Sidebar
+              activeView={activeView}
+              onNavigate={(view) => {
+                setActiveView(view);
+                setIsMobileSidebarOpen(false);
+              }}
+              currentUser={currentUser}
+              onLogout={handleLogout}
               appliedCount={appliedList.length}
-              onOpenAppliedModal={() => setIsAppliedModalOpen(true)}
-              onVerifyDigiLocker={handleDigiLockerBypass}
-              onApplyAllEligible={handleApplyAllEligible}
+              availableSchemesCount={schemes.filter(s => s.is_eligible).length}
+              isExecuting={executionStatus.isExecuting}
+              isVaultActive={isVaultActive}
+              wsConnected={executionStatus.wsConnected}
+              activeActor={executionStatus.activeActor}
+              isInspectorOpen={isInspectorOpen}
+              onToggleInspector={() => {
+                setIsInspectorOpen(!isInspectorOpen);
+                setIsMobileSidebarOpen(false);
+              }}
+              eventCount={telemetryEvents.length}
               onSyncLiveData={handleSyncLiveData}
               isSyncing={isSyncing}
-              isVaultActive={isVaultActive}
-              vaultDocumentNames={vaultDocNames}
-              onClearVault={handleClearVault}
+              onOpenWalkthrough={() => {
+                setWalkthroughOpen(true);
+                setIsMobileSidebarOpen(false);
+              }}
+              lang={lang}
+              onToggleLang={() => setLang((prev) => (prev === 'en' ? 'hi' : 'en'))}
             />
-          </section>
+          </div>
+        </div>
+      )}
 
-          {/* Column 2: Live Viewport Screencast & Anti-Bot Controls */}
-          <section className={`xl:col-span-5 h-[calc(100vh-140px)] xl:h-[calc(100vh-95px)] min-h-[540px] flex flex-col ${
-            mobileTab === 'viewport' ? 'flex' : 'hidden xl:flex'
-          }`}>
-            <ViewportColumn
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 bg-white">
+        {/* Top Header Bar (Efferd App-Shell Header) */}
+        <header className="h-14 bg-white/95 backdrop-blur-md border-b border-[#e4e4e7] px-4 md:px-6 flex items-center justify-between shrink-0 sticky top-0 z-20">
+          <div className="flex items-center gap-2.5">
+            {/* Mobile Hamburger Menu Toggle */}
+            <button
+              type="button"
+              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              className="lg:hidden p-1.5 rounded-lg text-[#71717a] hover:text-[#09090b] hover:bg-[#f4f4f5] transition-colors cursor-pointer"
+            >
+              {isMobileSidebarOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+            </button>
+
+            {/* Breadcrumb Navigation (Efferd Breadcrumb Style) */}
+            <nav className="flex items-center gap-1.5 text-xs" aria-label="Breadcrumb">
+              <span className="text-[#71717a]">Dashboard</span>
+              <span className="text-[#a1a1aa] font-mono">/</span>
+              <span className="font-medium text-[#09090b]">{getViewTitle()}</span>
+            </nav>
+          </div>
+
+          {/* Right Header Status & Action Controls */}
+          <div className="flex items-center gap-2">
+            {/* Live Gateway Pill */}
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] text-xs text-[#71717a]">
+              <span className={`size-1.5 rounded-full shrink-0 ${executionStatus.wsConnected ? 'bg-emerald-500' : 'bg-amber-500 animate-pulse'}`} />
+              <span className="hidden sm:inline font-mono text-[11px] font-medium">{executionStatus.wsConnected ? 'Gateway 99.9%' : 'Standby'}</span>
+            </div>
+
+            {/* Active Execution Live Pill */}
+            {executionStatus.isExecuting && (
+              <button
+                type="button"
+                onClick={() => setActiveView('workspace')}
+                className="px-2.5 py-1 rounded-md bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-medium flex items-center gap-1.5 hover:bg-emerald-100 transition-colors cursor-pointer"
+              >
+                <span className="size-1.5 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                <span>Running Session</span>
+              </button>
+            )}
+
+            {/* Evaluator AI Inspector Pill */}
+            <button
+              type="button"
+              onClick={() => setIsInspectorOpen(!isInspectorOpen)}
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-md bg-white hover:bg-[#f4f4f5] border border-[#e4e4e7] text-xs font-medium text-[#09090b] transition-colors cursor-pointer"
+            >
+              <Activity className="size-3.5 text-[#71717a]" />
+              <span className="hidden sm:inline">Inspector</span>
+              {telemetryEvents.length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full bg-[#18181b] text-white font-mono text-[10px] font-medium">
+                  {telemetryEvents.length}
+                </span>
+              )}
+            </button>
+          </div>
+        </header>
+
+        {/* View Routing Render */}
+        <main className="flex-1 overflow-y-auto">
+          {activeView === 'overview' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+              <OverviewView
+                profile={profile}
+                schemes={schemes}
+                appliedList={appliedList}
+                dualDocResult={dualDocResult}
+                isVaultActive={isVaultActive}
+                isExecuting={executionStatus.isExecuting}
+                onNavigate={(view) => setActiveView(view)}
+                onSelectSchemeAndExecute={handleSelectSchemeAndExecute}
+                onOpenReceipt={(r) => {
+                  setActiveReceipt(r);
+                  setReceiptOpen(true);
+                }}
+                onLoadBenchmark={handleLoadBenchmarkDocument}
+                onVerifyDigiLocker={handleDigiLockerBypass}
+              />
+            </div>
+          )}
+
+          {activeView === 'scholarships' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+              <ScholarshipsView
+                schemes={schemes}
+                onSelectSchemeAndExecute={handleSelectSchemeAndExecute}
+                onApplyAllEligible={handleApplyAllEligible}
+                onOpenAddModal={() => setIsAddModalOpen(true)}
+                onDeleteCustomScheme={handleDeleteCustomScheme}
+                isExecuting={executionStatus.isExecuting}
+                onSyncLiveData={handleSyncLiveData}
+                isSyncing={isSyncing}
+                onNavigate={(view) => setActiveView(view)}
+              />
+            </div>
+          )}
+
+          {activeView === 'documents' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+              <DocumentsView
+                profile={profile}
+                dualDocResult={dualDocResult}
+                isVaultActive={isVaultActive}
+                vaultDocumentNames={vaultDocNames}
+                onParseDocuments={handleParseDocuments}
+                onLoadBenchmark={handleLoadBenchmarkDocument}
+                onClearVault={handleClearVault}
+                onVerifyDigiLocker={handleDigiLockerBypass}
+                isExecuting={executionStatus.isExecuting}
+              />
+            </div>
+          )}
+
+          {activeView === 'applications' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+              <ApplicationsView
+                applications={appliedList}
+                onOpenReceipt={(r) => {
+                  setActiveReceipt(r);
+                  setReceiptOpen(true);
+                }}
+                onReplayRecording={(app: AppliedScholarship) => {
+                  const found = schemes.find((s) => s.scheme.id === app.schemeId);
+                  if (found) {
+                    setSelectedScheme(found.scheme);
+                  }
+                  if (app.receipt) {
+                    setActiveReceipt(app.receipt);
+                  }
+                  setActiveView('workspace');
+                }}
+                onNavigate={(view) => setActiveView(view)}
+              />
+            </div>
+          )}
+
+          {activeView === 'profile' && (
+            <div className="p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+              <ProfileView
+                profile={profile}
+                onSave={handleSaveEditedProfile}
+              />
+            </div>
+          )}
+
+          {activeView === 'workspace' && (
+            <ExecutionWorkspace
+              scheme={selectedScheme}
+              profile={profile}
               currentStage={executionStatus.currentStage}
               activeActor={executionStatus.activeActor}
-              selectedScheme={selectedScheme}
               isExecuting={executionStatus.isExecuting}
-              receipt={currentReceipt}
-              onOpenReceipt={handleOpenReceiptModal}
               isPaused={executionStatus.isPaused}
+              receipt={currentReceipt}
+              telemetryEvents={telemetryEvents}
+              onBack={() => setActiveView('scholarships')}
               onTogglePause={handleTogglePause}
               onStepAdvance={handleStepAdvance}
               onSkipTyping={handleSkipTyping}
+              onAuthorizeSubmission={handleAuthorizeSubmission}
+              onReset={handleReset}
+              onOpenReceiptModal={handleOpenReceiptModal}
             />
-          </section>
+          )}
+        </main>
+      </div>
 
-          {/* Column 3: Agent Reasoning Trace & Telemetry Stream */}
-          <section className={`xl:col-span-3 h-[calc(100vh-140px)] xl:h-[calc(100vh-95px)] min-h-[540px] flex flex-col ${
-            mobileTab === 'trace' ? 'flex' : 'hidden xl:flex'
-          }`}>
-            <TraceColumn
-              events={telemetryEvents}
-              currentStage={executionStatus.currentStage}
-            />
-          </section>
-        </div>
-      </main>
-
-      {/* Slide-over Deep AI Reasoning & Telemetry Inspector (Judge View) */}
+      {/* Evaluator AI Reasoning & Telemetry Inspector Drawer */}
       <InspectorDrawer
         isOpen={isInspectorOpen}
         onClose={() => setIsInspectorOpen(false)}
@@ -750,36 +871,7 @@ export const App: React.FC = () => {
         wsConnected={executionStatus.wsConnected}
       />
 
-      {/* Applied Scholarships Registry Modal */}
-      <AppliedScholarshipsModal
-        isOpen={isAppliedModalOpen}
-        onClose={() => setIsAppliedModalOpen(false)}
-        applications={appliedList}
-        onOpenReceipt={(r) => {
-          setActiveReceipt(r);
-          setReceiptOpen(true);
-        }}
-        onReplayRecording={(app) => {
-          const found = schemes.find((s) => s.scheme.id === app.schemeId);
-          if (found) {
-            setSelectedScheme(found.scheme);
-          }
-          if (app.receipt) {
-            setActiveReceipt(app.receipt);
-          }
-          setMobileTab('viewport');
-        }}
-      />
-
-      {/* Citizen Profile Live Editor Modal */}
-      <EditProfileModal
-        isOpen={isEditProfileOpen}
-        onClose={() => setIsEditProfileOpen(false)}
-        profile={profile}
-        onSave={handleSaveEditedProfile}
-      />
-
-      {/* Human-in-the-Loop Sign-off Gate Modal */}
+      {/* Human-in-the-Loop Sign-off Gate Modal (Backup / Prompt) */}
       <HitlModal
         isOpen={hitlOpen}
         onClose={() => setHitlOpen(false)}
@@ -794,7 +886,7 @@ export const App: React.FC = () => {
         onClose={() => setReceiptOpen(false)}
       />
 
-      {/* User-Isolated Custom Scheme / Portal Modal */}
+      {/* Add Custom Statutory Scheme Modal */}
       <AddSchemeModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
