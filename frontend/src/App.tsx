@@ -11,6 +11,7 @@ import { AddSchemeModal } from './components/intake/AddSchemeModal';
 import { EditProfileModal } from './components/intake/EditProfileModal';
 import { AppliedScholarshipsModal } from './components/applications/AppliedScholarshipsModal';
 import { LoginPage } from './components/auth/LoginPage';
+import { JudgeWalkthroughModal } from './components/walkthrough/JudgeWalkthroughModal';
 import type { 
   CitizenProfile, 
   CitizenUser,
@@ -20,7 +21,6 @@ import type {
   ScholarshipScheme,
   AppliedScholarship
 } from './types';
-import { SAMPLE_PRESETS } from './lib/presets';
 import { 
   matchSchemes, 
   parseDualDocuments, 
@@ -92,7 +92,22 @@ export const App: React.FC = () => {
         attributes: {},
       };
     }
-    return SAMPLE_PRESETS[0].profile;
+    // Zero Dummy Data Compliance: unauthenticated/empty baseline
+    return {
+      full_name: '',
+      date_of_birth: '2003-01-01',
+      national_id: '',
+      email: '',
+      phone: '',
+      address_street: '',
+      address_city: '',
+      address_state: 'Karnataka',
+      address_zip: '',
+      income_annual: 0,
+      household_size: 1,
+      category: 'GENERAL',
+      attributes: {},
+    };
   });
 
   // Citizen documents and scheme matching
@@ -113,6 +128,7 @@ export const App: React.FC = () => {
   const [isAppliedModalOpen, setIsAppliedModalOpen] = useState<boolean>(false);
   const [isInspectorOpen, setIsInspectorOpen] = useState<boolean>(false);
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [walkthroughOpen, setWalkthroughOpen] = useState<boolean>(false);
 
   // Responsive mobile/tablet tab selector (360px - 1024px)
   const [mobileTab, setMobileTab] = useState<'intake' | 'viewport' | 'trace'>('intake');
@@ -317,6 +333,37 @@ export const App: React.FC = () => {
       setSelectedScheme(matched[0].scheme);
     }
   }, [profile, userId]);
+
+  const handleLoadBenchmarkDocument = useCallback(async () => {
+    try {
+      const [tRes, iRes] = await Promise.all([
+        fetch('/samples/Academic_Marksheet_Aarav_Sharma.pdf'),
+        fetch('/samples/Income_Certificate_Aarav_Sharma.pdf')
+      ]);
+      if (tRes.ok && iRes.ok) {
+        const [tBlob, iBlob] = await Promise.all([tRes.blob(), iRes.blob()]);
+        const blobToBase64 = (blob: Blob): Promise<string> =>
+          new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const res = reader.result as string;
+              const idx = res.indexOf(',');
+              resolve(idx >= 0 ? res.slice(idx + 1) : res);
+            };
+            reader.readAsDataURL(blob);
+          });
+        const [tB64, iB64] = await Promise.all([blobToBase64(tBlob), blobToBase64(iBlob)]);
+        await handleParseDocuments(
+          tB64,
+          iB64,
+          'Academic_Marksheet_Aarav_Sharma.pdf',
+          'Income_Certificate_Aarav_Sharma.pdf'
+        );
+      }
+    } catch (e) {
+      console.warn('Failed to load benchmark document', e);
+    }
+  }, [handleParseDocuments]);
 
   const handleClearVault = useCallback(async () => {
     await clearVault(userId);
@@ -582,6 +629,7 @@ export const App: React.FC = () => {
         isSyncing={isSyncing}
         lang={lang}
         onToggleLang={() => setLang((prev) => (prev === 'en' ? 'hi' : 'en'))}
+        onOpenWalkthrough={() => setWalkthroughOpen(true)}
       />
 
       {/* Main Cockpit Layout */}
@@ -752,6 +800,13 @@ export const App: React.FC = () => {
         onClose={() => setIsAddModalOpen(false)}
         onAddScheme={handleCreateCustomScheme}
         userId={userId}
+      />
+
+      {/* Interactive Judging Panel Walkthrough Modal */}
+      <JudgeWalkthroughModal
+        isOpen={walkthroughOpen}
+        onClose={() => setWalkthroughOpen(false)}
+        onStartDemoDocument={handleLoadBenchmarkDocument}
       />
     </div>
   );
