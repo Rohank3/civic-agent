@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { ShieldAlert, X, RotateCcw, Lock, FileSignature } from 'lucide-react';
+import { ShieldCheck, X, RotateCcw, Lock, FileSignature } from 'lucide-react';
 import type { CitizenProfile, ScholarshipScheme } from '../../types';
 
 interface HitlModalProps {
@@ -27,7 +27,7 @@ export const HitlModal: React.FC<HitlModalProps> = ({
       const canvas = canvasRef.current;
       const ctx = canvas.getContext('2d');
       if (ctx) {
-        ctx.strokeStyle = '#38bdf8'; // sky-400
+        ctx.strokeStyle = '#09090b'; // Crisp high contrast dark ink
         ctx.lineWidth = 2.5;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
@@ -88,78 +88,78 @@ export const HitlModal: React.FC<HitlModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-2xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-xs font-sans">
+      <div className="bg-white border border-[#e4e4e7] rounded-lg max-w-2xl w-full max-h-[92vh] flex flex-col shadow-xl overflow-hidden text-[#09090b]">
         {/* Header */}
-        <div className="p-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
-              <FileSignature className="w-5 h-5" />
+        <div className="px-5 py-4 border-b border-[#e4e4e7] bg-white flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-md bg-[#f4f4f5] text-[#18181b] flex items-center justify-center border border-[#e4e4e7]">
+              <FileSignature className="size-4" />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white">
+              <h3 className="font-semibold text-sm text-[#09090b]">
                 Human-in-the-Loop Review & Legal Sign-off
               </h3>
-              <p className="text-[11px] text-slate-400">
-                CivicAgent Statutory Consent Gate before Portal Submission
+              <p className="text-xs text-[#71717a]">
+                Statutory review and consent gate before application submission
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+            className="p-1 rounded-md text-[#71717a] hover:text-[#09090b] hover:bg-[#f4f4f5] transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="size-4" />
           </button>
         </div>
 
         {/* Scrollable Body */}
-        <div className="p-5 overflow-y-auto space-y-4 font-sans text-xs">
+        <div className="p-5 overflow-y-auto space-y-4 text-xs">
           {/* Alert Notice */}
-          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-200 flex items-start gap-2.5">
-            <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-            <div className="text-[11px] leading-relaxed">
-              <strong>Statutory Review Requirement:</strong> The Playwright agent has accurately mapped all
-              required form inputs from your verified transcript and income certificate. As a legal safeguard,
-              please review the details and provide your digital signature to authorize final submission.
+          <div className="p-3.5 rounded-md bg-[#f4f4f5] border border-[#e4e4e7] text-[#09090b] flex items-start gap-2.5">
+            <ShieldCheck className="size-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div className="text-xs leading-relaxed text-[#71717a]">
+              <strong className="text-[#09090b] font-medium">Statutory Review Requirement:</strong> The autonomous agent has accurately mapped all
+              required form fields from your verified transcript and income certificate. Please review your
+              details and draw your signature below to authorize submission.
             </div>
           </div>
 
           {/* Form Verification Summary Table */}
-          <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/50">
-            <div className="px-3 py-2 bg-slate-800/80 font-semibold text-slate-200 text-xs border-b border-slate-800">
+          <div className="border border-[#e4e4e7] rounded-md overflow-hidden bg-white shadow-xs">
+            <div className="px-3.5 py-2 bg-[#f4f4f5] font-medium text-[#09090b] text-xs border-b border-[#e4e4e7]">
               Populated Application Data Table
             </div>
-            <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+            <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-3 text-xs">
               <div>
-                <span className="text-slate-400 block">Applicant Name:</span>
-                <span className="font-semibold text-white">{profile.full_name}</span>
+                <span className="text-[#71717a] block text-[11px]">Applicant Name:</span>
+                <span className="font-medium text-[#09090b]">{profile.full_name}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">National Identifier:</span>
-                <span className="font-mono text-slate-200">{profile.national_id}</span>
+                <span className="text-[#71717a] block text-[11px]">National Identifier:</span>
+                <span className="font-mono text-[#09090b]">{profile.national_id}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Target Grant Scheme:</span>
-                <span className="font-semibold text-cyan-300 truncate block">
+                <span className="text-[#71717a] block text-[11px]">Target Scheme:</span>
+                <span className="font-medium text-[#09090b] truncate block">
                   {scheme?.name || 'Higher Education Grant'}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block">Annual Family Income:</span>
-                <span className="font-semibold text-emerald-400">
+                <span className="text-[#71717a] block text-[11px]">Annual Family Income:</span>
+                <span className="font-semibold text-emerald-700 font-mono">
                   ₹ {profile.income_annual.toLocaleString()}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block">Academic Score:</span>
-                <span className="text-slate-200">
+                <span className="text-[#71717a] block text-[11px]">Academic Score:</span>
+                <span className="text-[#09090b]">
                   GPA {profile.attributes.gpa || 3.85} • {profile.attributes.percentage || 82.5}%
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block">Issuing Authority:</span>
-                <span className="text-slate-200">Office of the Tahsildar (Verified)</span>
+                <span className="text-[#71717a] block text-[11px]">Issuing Authority:</span>
+                <span className="text-[#71717a]">Verified Revenue Authority</span>
               </div>
             </div>
           </div>
@@ -167,22 +167,22 @@ export const HitlModal: React.FC<HitlModalProps> = ({
           {/* Digital Signature Pad */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="font-semibold text-slate-200 flex items-center gap-1.5">
+              <label className="font-medium text-[#09090b] flex items-center gap-1.5 text-xs">
                 <span>Citizen Digital Signature:</span>
-                <span className="text-[10px] text-slate-400 font-normal">
+                <span className="text-[#71717a] font-normal">
                   (Draw with mouse or touch)
                 </span>
               </label>
               <button
                 onClick={clearSignature}
-                className="text-[10px] text-slate-400 hover:text-slate-200 active:text-white flex items-center gap-1 hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-purple-400 rounded-sm"
+                className="text-xs text-[#71717a] hover:text-[#09090b] flex items-center gap-1 cursor-pointer transition-colors"
               >
-                <RotateCcw className="w-3 h-3" />
+                <RotateCcw className="size-3" />
                 <span>Clear</span>
               </button>
             </div>
 
-            <div className="rounded-lg border-2 border-dashed border-slate-700 bg-slate-950 overflow-hidden relative">
+            <div className="rounded-md border border-[#e4e4e7] bg-white overflow-hidden relative shadow-inner">
               <canvas
                 ref={canvasRef}
                 width={590}
@@ -194,45 +194,45 @@ export const HitlModal: React.FC<HitlModalProps> = ({
                 onTouchStart={startDrawing}
                 onTouchMove={draw}
                 onTouchEnd={stopDrawing}
-                className="w-full h-[120px] cursor-crosshair touch-none"
+                className="w-full h-[120px] cursor-crosshair touch-none bg-white"
               />
               {!hasSignature && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-slate-600 text-xs font-mono">
-                  Sign above using your mouse or finger
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none text-[#a1a1aa] text-xs">
+                  Sign here using your mouse or finger
                 </div>
               )}
             </div>
           </div>
 
           {/* Perjury Declaration Checkbox */}
-          <label className="flex items-start gap-2.5 p-2.5 rounded-lg border border-slate-800 bg-slate-950/60 cursor-pointer select-none hover:bg-slate-950/80 transition-colors">
+          <label className="flex items-start gap-2.5 p-3 rounded-md border border-[#e4e4e7] bg-[#f4f4f5] cursor-pointer select-none hover:bg-[#ececee] transition-colors">
             <input
               type="checkbox"
               checked={isCertified}
               onChange={(e) => setIsCertified(e.target.checked)}
-              className="mt-0.5 rounded border-slate-700 text-blue-600 focus:ring-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 w-4 h-4 cursor-pointer"
+              className="mt-0.5 rounded border-[#e4e4e7] text-[#18181b] focus:ring-[#18181b] size-4 cursor-pointer"
             />
-            <span className="text-[11px] text-slate-300 leading-relaxed">
-              I declare under penalty of perjury that all facts and supporting credentials submitted
-              herein are true, accurate, and complete. I authorize CivicAgent to commit this filing.
+            <span className="text-xs text-[#71717a] leading-relaxed">
+              I declare under penalty of perjury that all facts and credentials submitted herein are
+              true, accurate, and complete. I authorize CivicAgent to commit this statutory application.
             </span>
           </label>
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-end gap-2.5">
+        <div className="px-5 py-3.5 border-t border-[#e4e4e7] bg-white flex items-center justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 active:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            className="inline-flex h-8 items-center rounded-md border border-[#e4e4e7] bg-white px-3 text-xs font-medium text-[#71717a] hover:text-[#09090b] hover:bg-[#f4f4f5] transition-colors cursor-pointer"
           >
             Cancel
           </button>
           <button
             onClick={handleAuthorize}
             disabled={!isCertified || !hasSignature}
-            className="px-5 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 active:from-purple-700 active:to-indigo-700 active:scale-95 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-purple-500/20 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#18181b] hover:bg-[#27272a] px-3.5 text-xs font-medium text-white shadow-xs transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
           >
-            <Lock className="w-3.5 h-3.5" />
+            <Lock className="size-3.5" />
             <span>Authorize & Submit Application</span>
           </button>
         </div>

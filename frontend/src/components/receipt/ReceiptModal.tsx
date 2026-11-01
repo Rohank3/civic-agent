@@ -21,13 +21,12 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
 
   useEffect(() => {
     if (receipt) {
-      // Launch celebratory confetti burst
       try {
         confetti({
-          particleCount: 100,
-          spread: 70,
+          particleCount: 60,
+          spread: 50,
           origin: { y: 0.6 },
-          colors: ['#38bdf8', '#818cf8', '#34d399', '#f472b6'],
+          colors: ['#18181b', '#10b981', '#3b82f6', '#71717a'],
         });
       } catch {
         // ignore confetti errors
@@ -59,134 +58,134 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({ receipt, onClose }) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-xl w-full max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30 backdrop-blur-xs font-sans">
+      <div className="bg-white border border-[#e4e4e7] rounded-lg max-w-xl w-full max-h-[92vh] flex flex-col shadow-xl overflow-hidden text-[#09090b]">
         {/* Header Banner */}
-        <div className="p-4 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-slate-900 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-              <CheckCircle2 className="w-6 h-6" />
+        <div className="px-5 py-4 bg-white border-b border-[#e4e4e7] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-md bg-emerald-50 text-emerald-700 flex items-center justify-center border border-emerald-200">
+              <CheckCircle2 className="size-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-base text-white">Application Submitted & Verified</h3>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                <h3 className="font-semibold text-sm text-[#09090b]">Application Submitted & Verified</h3>
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-emerald-100 text-emerald-800 font-medium">
                   OFFICIAL RECORD
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-xs text-[#71717a]">
                 Official Government Tracking ID and Cryptographic SHA-256 Receipt Generated
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 active:bg-slate-700 transition-colors cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            className="p-1 rounded-md text-[#71717a] hover:text-[#09090b] hover:bg-[#f4f4f5] transition-colors cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="size-4" />
           </button>
         </div>
 
         {/* Scrollable Certificate Content */}
-        <div className="p-5 overflow-y-auto space-y-4 font-sans text-xs">
+        <div className="p-5 overflow-y-auto space-y-4 text-xs">
           {/* Tracking Number Callout Box */}
-          <div className="p-4 rounded-xl border border-emerald-500/40 bg-emerald-950/20 text-center space-y-1">
-            <span className="text-[11px] text-emerald-400 font-semibold uppercase tracking-wider block">
+          <div className="p-4 rounded-md border border-emerald-200 bg-emerald-50/50 text-center space-y-1">
+            <span className="text-[11px] text-emerald-800 font-medium uppercase tracking-wider block">
               Official Application Tracking Number
             </span>
-            <div className="font-mono text-2xl font-bold tracking-tight text-white select-all">
+            <div className="font-mono text-2xl font-bold tracking-tight text-[#09090b] select-all">
               {receipt.tracking_number}
             </div>
-            <span className="text-[10px] text-slate-400 block">
+            <span className="text-xs text-[#71717a] block">
               Logged in State Higher Education Department System • {new Date(receipt.timestamp).toLocaleString()}
             </span>
           </div>
 
           {/* Details Table */}
-          <div className="border border-slate-800 rounded-lg overflow-hidden bg-slate-950/50">
-            <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+          <div className="border border-[#e4e4e7] rounded-md overflow-hidden bg-white shadow-xs">
+            <div className="p-4 grid grid-cols-2 gap-x-4 gap-y-2.5 text-xs">
               <div>
-                <span className="text-slate-400 block">Applicant:</span>
-                <span className="font-semibold text-white">{receipt.student_name}</span>
+                <span className="text-[#71717a] block text-[11px]">Applicant Name:</span>
+                <span className="font-medium text-[#09090b]">{receipt.student_name}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Scheme:</span>
-                <span className="font-semibold text-cyan-300 truncate block" title={receipt.scheme_title}>{receipt.scheme_title}</span>
+                <span className="text-[#71717a] block text-[11px]">Target Scheme:</span>
+                <span className="font-medium text-[#09090b] truncate block" title={receipt.scheme_title}>{receipt.scheme_title}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Case ID:</span>
-                <span className="font-mono text-slate-300">{receipt.case_id}</span>
+                <span className="text-[#71717a] block text-[11px]">Case ID:</span>
+                <span className="font-mono text-[#09090b]">{receipt.case_id}</span>
               </div>
               <div>
-                <span className="text-slate-400 block">Verified Grant:</span>
-                <span className="font-semibold text-emerald-400">
+                <span className="text-[#71717a] block text-[11px]">Verified Grant Amount:</span>
+                <span className="font-semibold text-emerald-700 font-mono">
                   {receipt.grant_amount ? `₹ ${receipt.grant_amount.toLocaleString()} / year` : '₹ 25,000 / year'}
                 </span>
               </div>
               {receipt.ministry && (
-                <div className="col-span-2 pt-1 border-t border-slate-800/60">
-                  <span className="text-slate-400 block">Issuing Authority:</span>
-                  <span className="font-medium text-slate-200">{receipt.ministry}</span>
+                <div className="col-span-2 pt-2 border-t border-[#e4e4e7]">
+                  <span className="text-[#71717a] block text-[11px]">Issuing Authority:</span>
+                  <span className="font-normal text-[#09090b]">{receipt.ministry}</span>
                 </div>
               )}
             </div>
           </div>
 
           {/* Privacy Preservation Guarantee Callout */}
-          <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-950/20 flex items-center justify-between text-xs">
-            <div className="flex items-center gap-2 text-emerald-300">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+          <div className="p-3 rounded-md border border-[#e4e4e7] bg-[#f4f4f5] flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-[#71717a]">
+              <ShieldCheck className="size-4 text-emerald-600 shrink-0" />
               <span>
-                <strong>Privacy-Preserved Official Export:</strong> Street address & sensitive national IDs are redacted in exported proofs.
+                <strong className="text-[#09090b] font-medium">Privacy Preservation:</strong> Address and sensitive national ID identifiers are masked in public exports.
               </span>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-              DPDP & GDPR
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white border border-[#e4e4e7] text-[#71717a]">
+              DPDP Compliant
             </span>
           </div>
 
           {/* Cryptographic SHA-256 Proof */}
-          <div className="p-3 rounded-lg border border-slate-800 bg-slate-950/80 space-y-1.5">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-semibold text-slate-300 flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-cyan-400" />
+          <div className="p-3.5 rounded-md border border-[#e4e4e7] bg-[#fafafa] space-y-2 shadow-xs">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-[#09090b] flex items-center gap-1.5">
+                <ShieldCheck className="size-3.5 text-emerald-600" />
                 <span>Tamper-Evident SHA-256 Digest (Submission Proof)</span>
               </span>
               <button
                 onClick={handleCopyHash}
-                className="text-[10px] text-slate-400 hover:text-slate-200 active:text-white flex items-center gap-1 hover:underline cursor-pointer focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400 rounded-sm"
+                className="text-xs text-[#18181b] hover:text-black flex items-center gap-1 cursor-pointer font-medium transition-colors"
               >
-                {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                <span>{copied ? 'Copied Hash' : 'Copy Hash'}</span>
+                {copied ? <Check className="size-3 text-emerald-600" /> : <Copy className="size-3" />}
+                <span>{copied ? 'Copied' : 'Copy'}</span>
               </button>
             </div>
-            <div className="font-mono text-[10px] text-slate-400 break-all p-2 rounded bg-slate-900 border border-slate-800">
+            <div className="font-mono text-xs text-[#09090b] break-all p-2 rounded border border-[#e4e4e7] bg-white">
               {receipt.sha256_hash}
             </div>
             {receipt.signature_hash && (
-              <div className="pt-1.5 border-t border-slate-800/80 text-[10px] flex items-center justify-between">
-                <span className="text-slate-400 font-mono">Citizen Signature Proof:</span>
-                <span className="font-mono text-emerald-400 truncate max-w-[240px]">{receipt.signature_hash}</span>
+              <div className="pt-2 border-t border-[#e4e4e7] text-xs flex items-center justify-between">
+                <span className="text-[#71717a] font-mono text-[11px]">Citizen Signature Digest:</span>
+                <span className="font-mono text-emerald-700 truncate max-w-[240px] text-[11px]">{receipt.signature_hash}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Footer Actions */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between gap-2.5">
+        <div className="px-5 py-3.5 border-t border-[#e4e4e7] bg-white flex items-center justify-between gap-2">
           <button
             onClick={handleDownloadJson}
-            className="px-3.5 py-2 rounded-lg border border-slate-700 hover:bg-slate-800 active:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-[#e4e4e7] bg-white hover:bg-[#f4f4f5] px-3 text-xs font-medium text-[#18181b] transition-colors cursor-pointer"
           >
-            <FileText className="w-3.5 h-3.5 text-indigo-400" />
+            <FileText className="size-3.5 text-[#71717a]" />
             <span>Export JSON Audit</span>
           </button>
 
           <button
             onClick={handleDownloadPdf}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-emerald-500/20 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-[#18181b] hover:bg-[#27272a] px-3.5 text-xs font-medium text-white transition-colors cursor-pointer shadow-xs"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="size-3.5" />
             <span>Download Official PDF Receipt</span>
           </button>
         </div>

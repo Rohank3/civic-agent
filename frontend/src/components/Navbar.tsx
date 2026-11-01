@@ -1,5 +1,15 @@
 import React from 'react';
-import { ShieldCheck, Activity, Database, Sparkles, UserCheck, User, LogOut, Award, Terminal, Languages } from 'lucide-react';
+import { 
+  ShieldCheck, 
+  Activity, 
+  Database, 
+  Sparkles, 
+  User, 
+  LogOut, 
+  Award, 
+  Terminal, 
+  Languages 
+} from 'lucide-react';
 import type { ActorRole, CitizenUser } from '../types';
 
 interface NavbarProps {
@@ -42,125 +52,132 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
   const getActorBadge = () => {
     switch (activeActor) {
       case 'STUDENT_INTAKE':
-        return { label: 'Student Intake Phase', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30' };
+        return { 
+          label: 'Student Intake Phase', 
+          dotColor: 'bg-amber-400', 
+          badgeStyle: 'bg-amber-500/10 text-amber-400 border-amber-500/25' 
+        };
       case 'AUTONOMOUS_AGENT':
-        return { label: 'Agent in Browser Control', color: 'bg-blue-500/20 text-blue-300 border-blue-500/30 animate-pulse' };
+        return { 
+          label: 'Agent Browser Session Active', 
+          dotColor: 'bg-blue-400 animate-pulse', 
+          badgeStyle: 'bg-blue-500/10 text-blue-400 border-blue-500/25' 
+        };
       case 'CITIZEN_HITL':
-        return { label: 'Citizen HITL Gate Active', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30 animate-bounce' };
+        return { 
+          label: 'Citizen Review & Consent Required', 
+          dotColor: 'bg-indigo-400', 
+          badgeStyle: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30 font-semibold' 
+        };
       case 'GOVERNMENT_AUTHORITY':
-        return { label: 'Government Portal Confirmed', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' };
+        return { 
+          label: 'Government Portal Confirmed', 
+          dotColor: 'bg-emerald-400', 
+          badgeStyle: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' 
+        };
     }
   };
 
   const badge = getActorBadge();
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-2.5">
+    <header className="sticky top-0 z-40 bg-white border-b border-[#E5EAEF] px-4 py-2.5 shadow-xs">
       <div className="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-3">
         {/* Brand */}
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <ShieldCheck className="w-5 h-5 text-white" />
+          <div className="w-9 h-9 rounded-xl bg-[#5D87FF] flex items-center justify-center text-white shadow-xs">
+            <ShieldCheck className="w-5 h-5" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
+              <span className="font-bold text-lg tracking-tight text-[#2A3547]">
                 CivicAgent
               </span>
-              <span className="px-2 py-0.5 text-[10px] font-semibold tracking-wider rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase">
-                Autonomous Cockpit
+              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-[#5D87FF]/15 text-[#5D87FF] border border-[#5D87FF]/30">
+                Citizen Portal
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">
-              Autonomous Higher Education Grant & Bureaucracy Execution Platform
+            <p className="text-xs text-[#5A6A85] hidden sm:block">
+              Public Benefit & Higher Education Scholarship Execution Platform
             </p>
           </div>
         </div>
 
-        {/* Live Badges & Actor Persona */}
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Active Custody Persona Badge */}
-          <div className={`px-2.5 py-1 rounded-md text-xs font-medium border flex items-center gap-1.5 ${badge.color}`}>
-            <UserCheck className="w-3.5 h-3.5" />
+        {/* Action Controls & Indicators */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Active Lifecycle Status */}
+          <div className={`px-2.5 py-1 rounded-xl text-xs font-medium border flex items-center gap-2 ${badge.badgeStyle}`}>
+            <span className={`w-2 h-2 rounded-full ${badge.dotColor}`} />
             <span>{badge.label}</span>
           </div>
 
-          {/* Live Data.gov.in Sync Button */}
+          {/* Data.gov.in Live Sync */}
           {onSyncLiveData && (
             <button
               type="button"
               onClick={onSyncLiveData}
               disabled={isSyncing}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 hover:bg-slate-700/80 active:bg-slate-600/80 border border-slate-700/60 text-xs text-slate-300 hover:text-white transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
-              title="Click to perform live Data.gov.in API catalog sync"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white hover:bg-[#F4F7FB] border border-[#E5EAEF] text-xs font-medium text-[#5A6A85] hover:text-[#2A3547] transition-colors cursor-pointer disabled:opacity-50"
+              title="Synchronize schemes with national registry"
             >
-              <Database className={`w-3.5 h-3.5 text-cyan-400 ${isSyncing ? 'animate-spin' : ''}`} />
-              <span className="hidden sm:inline">Data.gov.in</span>
-              <span className="text-[10px] text-emerald-400 font-mono font-bold">LIVE SYNC</span>
+              <Database className={`w-3.5 h-3.5 text-[#5D87FF] ${isSyncing ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Sync Portal Data</span>
             </button>
           )}
 
-          {/* Judge Demo Walkthrough Guide Button */}
+          {/* Evaluator / User Walkthrough */}
           {onOpenWalkthrough && (
             <button
               type="button"
               onClick={onOpenWalkthrough}
-              className="px-3 py-1 rounded-md text-xs font-bold bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/10 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-              title="Open interactive 5-step Evaluator Walkthrough (100-Point Rubric Guide)"
+              className="px-2.5 py-1 rounded-xl text-xs font-medium bg-white hover:bg-[#F4F7FB] border border-[#E5EAEF] text-[#5A6A85] hover:text-[#2A3547] flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Open Platform Walkthrough & Architecture Tour"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Judge Tour</span>
+              <Sparkles className="w-3.5 h-3.5 text-[#FFAE1F]" />
+              <span>Tour Guide</span>
             </button>
           )}
 
-          {/* AI Reasoning & Audit Inspector Button (Judge Toggle) */}
+          {/* System Telemetry & Reasoning Inspector */}
           {onToggleInspector && (
             <button
               type="button"
               onClick={onToggleInspector}
-              className={`px-3 py-1 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 active:scale-95 ${
+              className={`px-2.5 py-1 rounded-xl text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer border ${
                 isInspectorOpen
-                  ? 'bg-indigo-600 text-white ring-2 ring-indigo-400 shadow-indigo-500/30'
-                  : 'bg-indigo-500/15 hover:bg-indigo-500/25 active:bg-indigo-500/35 border border-indigo-500/30 text-indigo-300'
+                  ? 'bg-[#5D87FF] text-white border-[#5D87FF] shadow-xs'
+                  : 'bg-white hover:bg-[#F4F7FB] text-[#5A6A85] hover:text-[#2A3547] border-[#E5EAEF]'
               }`}
-              title="Toggle AI Reasoning & Execution Telemetry Inspector (Judge View)"
+              title="Toggle Telemetry & Audit Inspector"
             >
-              <Terminal className="w-3.5 h-3.5 text-indigo-400" />
-              <span>AI Inspector</span>
+              <Terminal className="w-3.5 h-3.5" />
+              <span>System Inspector</span>
               {eventCount > 0 && (
-                <span className="px-1.5 py-0.2 bg-indigo-500/30 text-indigo-200 text-[10px] rounded-full font-mono">
+                <span className={`px-1.5 py-0.2 rounded-full text-[11px] font-mono ${
+                  isInspectorOpen ? 'bg-[#4a75ee] text-white' : 'bg-[#F8FAFC] text-[#5A6A85] border border-[#E5EAEF]'
+                }`}>
                   {eventCount}
                 </span>
               )}
             </button>
           )}
 
-          {/* Dual-Target Legal Compliance Badge */}
-          <div 
-            className="hidden xl:flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-xs text-slate-400 cursor-help"
-            title="NeGD Compliant Statutory Gateway: Automated filings on production gov.in sites are restricted by IT Act 2000. Uses live institutional testbed mirror alongside active external URL support."
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span className="text-[11px] text-slate-300">Dual-Target (NeGD)</span>
-          </div>
-
-          {/* Telemetry Stream Indicator */}
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-            <Activity className={`w-3.5 h-3.5 ${wsConnected ? 'text-emerald-400' : 'text-amber-400'}`} />
-            <span className="hidden sm:inline">Telemetry:</span>
-            <span className={wsConnected ? 'text-emerald-400 font-medium' : 'text-amber-400 font-medium'}>
-              {wsConnected ? 'Connected' : 'Standby'}
+          {/* WebSocket Connection State */}
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white border border-[#E5EAEF] text-xs text-[#5A6A85]">
+            <Activity className={`w-3.5 h-3.5 ${wsConnected ? 'text-[#13DEB9]' : 'text-[#FFAE1F]'}`} />
+            <span className="hidden sm:inline font-medium">Gateway:</span>
+            <span className={`font-semibold ${wsConnected ? 'text-[#13DEB9]' : 'text-[#FFAE1F]'}`}>
+              {wsConnected ? 'Online' : 'Standby'}
             </span>
           </div>
 
           {/* Reset / New Session */}
           <button
             onClick={onReset}
-            className="px-3 py-1 rounded-md bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 hover:border-slate-600 text-xs font-medium text-slate-200 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400"
-            title="Reset session and load new applicant"
+            className="px-2.5 py-1 rounded-xl bg-[#5D87FF]/15 hover:bg-[#5D87FF]/25 border border-[#5D87FF]/30 text-xs font-semibold text-[#5D87FF] transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Start a new application session"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>New Case</span>
+            <span>New Application</span>
           </button>
 
           {/* Vernacular Language Switcher */}
@@ -168,11 +185,11 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
             <button
               type="button"
               onClick={onToggleLang}
-              className="px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 active:bg-slate-600 border border-slate-700 text-xs font-medium text-slate-200 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
-              title="Toggle Vernacular Language (English / हिंदी)"
+              className="px-2.5 py-1 rounded-xl bg-white hover:bg-[#F4F7FB] border border-[#E5EAEF] text-xs font-medium text-[#5A6A85] hover:text-[#2A3547] transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Switch language interface"
             >
-              <Languages className="w-3.5 h-3.5 text-amber-400" />
-              <span>{lang === 'hi' ? 'हिंदी (सक्रिय)' : 'English'}</span>
+              <Languages className="w-3.5 h-3.5 text-[#7C8FAC]" />
+              <span>{lang === 'hi' ? 'हिंदी' : 'English'}</span>
             </button>
           )}
 
@@ -180,33 +197,32 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
           {onOpenApplied && (
             <button
               onClick={onOpenApplied}
-              className="px-2.5 py-1 rounded-md bg-emerald-500/10 hover:bg-emerald-500/20 active:bg-emerald-500/30 border border-emerald-500/30 text-xs font-medium text-emerald-300 hover:text-emerald-200 transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-              title="View all filed scholarship applications & receipts"
+              className="px-2.5 py-1 rounded-xl bg-[#13DEB9]/15 hover:bg-[#13DEB9]/25 border border-[#13DEB9]/30 text-xs font-semibold text-[#13DEB9] transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="View filed scholarship records"
             >
-              <Award className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Applied ({appliedCount})</span>
+              <Award className="w-3.5 h-3.5 text-[#13DEB9]" />
+              <span>Submitted ({appliedCount})</span>
             </button>
           )}
 
           {/* Authenticated Citizen Profile & Logout */}
           {currentUser && (
-            <div className="flex items-center gap-2 pl-1.5 border-l border-slate-800">
+            <div className="flex items-center gap-2 pl-2 border-l border-[#E5EAEF]">
               <button
                 type="button"
                 onClick={onEditProfile}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 hover:bg-blue-500/20 active:bg-blue-500/30 border border-blue-500/20 hover:border-blue-500/40 text-xs text-blue-300 hover:text-blue-200 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-                title="Click to view and edit your Citizen Profile"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white hover:bg-[#F4F7FB] border border-[#E5EAEF] text-xs text-[#2A3547] transition-colors cursor-pointer"
+                title="View & update your verified citizen profile"
               >
-                <User className="w-3.5 h-3.5 text-blue-400" />
-                <span className="font-semibold text-white max-w-[120px] truncate">{currentUser.fullName}</span>
-                <span className="text-[10px] text-blue-400/80 hidden lg:inline">({currentUser.username})</span>
+                <User className="w-3.5 h-3.5 text-[#5D87FF]" />
+                <span className="font-semibold text-[#2A3547] max-w-[120px] truncate">{currentUser.fullName}</span>
               </button>
               {onLogout && (
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="p-1 rounded-md bg-slate-800 hover:bg-rose-500/20 active:bg-rose-500/30 border border-slate-700 hover:border-rose-500/30 text-slate-400 hover:text-rose-300 transition-all cursor-pointer active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400"
-                  title="Switch Citizen User / Sign Out"
+                  className="p-1 rounded-xl text-[#7C8FAC] hover:text-[#2A3547] hover:bg-[#E5EAEF]/60 border border-transparent transition-colors cursor-pointer"
+                  title="Sign out of account"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                 </button>
