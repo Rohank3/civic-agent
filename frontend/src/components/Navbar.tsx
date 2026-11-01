@@ -18,6 +18,7 @@ interface NavbarProps {
   isSyncing?: boolean;
   lang?: 'en' | 'hi';
   onToggleLang?: () => void;
+  onOpenWalkthrough?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = React.memo(({ 
@@ -36,6 +37,7 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
   isSyncing = false,
   lang = 'en',
   onToggleLang,
+  onOpenWalkthrough,
 }) => {
   const getActorBadge = () => {
     switch (activeActor) {
@@ -98,6 +100,19 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
             </button>
           )}
 
+          {/* Judge Demo Walkthrough Guide Button */}
+          {onOpenWalkthrough && (
+            <button
+              type="button"
+              onClick={onOpenWalkthrough}
+              className="px-3 py-1 rounded-md text-xs font-bold bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/10 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 flex items-center gap-1.5 transition-all cursor-pointer shadow-sm active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+              title="Open interactive 5-step Evaluator Walkthrough (100-Point Rubric Guide)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Judge Tour</span>
+            </button>
+          )}
+
           {/* AI Reasoning & Audit Inspector Button (Judge Toggle) */}
           {onToggleInspector && (
             <button
@@ -119,6 +134,15 @@ export const Navbar: React.FC<NavbarProps> = React.memo(({
               )}
             </button>
           )}
+
+          {/* Dual-Target Legal Compliance Badge */}
+          <div 
+            className="hidden xl:flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-xs text-slate-400 cursor-help"
+            title="NeGD Compliant Statutory Gateway: Automated filings on production gov.in sites are restricted by IT Act 2000. Uses live institutional testbed mirror alongside active external URL support."
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span className="text-[11px] text-slate-300">Dual-Target (NeGD)</span>
+          </div>
 
           {/* Telemetry Stream Indicator */}
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
